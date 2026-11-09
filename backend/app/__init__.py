@@ -5,6 +5,7 @@ from config import Config
 from .extensions import db
 from .database import check_database_connection
 from .routes.auth import auth_bp
+from .routes.business import business_bp
 
 
 def create_app():
@@ -13,8 +14,8 @@ def create_app():
 
     db.init_app(app)
 
-    # Register authentication routes
     app.register_blueprint(auth_bp)
+    app.register_blueprint(business_bp)
 
     CORS(app, resources={
         r"/api/*": {
@@ -41,6 +42,7 @@ def create_app():
     def database_health():
         try:
             check_database_connection()
+
             return jsonify({
                 "database": "connected",
                 "status": "success"
@@ -49,6 +51,7 @@ def create_app():
         except Exception:
             db.session.rollback()
             app.logger.exception("Database health check failed")
+
             return jsonify({
                 "database": "disconnected",
                 "status": "error",
