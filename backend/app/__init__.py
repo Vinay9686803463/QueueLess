@@ -1,21 +1,21 @@
-from flask import Flask, jsonify  # pyright: ignore[reportMissingImports]
-from flask_cors import CORS  # pyright: ignore[reportMissingImports,reportMissingModuleSource]
+from flask import Flask, jsonify
+from flask_cors import CORS
 
 from config import Config
-from .extensions import db  # pyright: ignore[reportMissingImports]
+from .extensions import db
 from .database import check_database_connection
+from .routes.auth import auth_bp
 
 
 def create_app():
     app = Flask(__name__)
-
-    # Load configuration
     app.config.from_object(Config)
 
-    # Initialize extensions
     db.init_app(app)
 
-    # Configure CORS
+    # Register authentication routes
+    app.register_blueprint(auth_bp)
+
     CORS(app, resources={
         r"/api/*": {
             "origins": "*"
@@ -41,7 +41,6 @@ def create_app():
     def database_health():
         try:
             check_database_connection()
-
             return jsonify({
                 "database": "connected",
                 "status": "success"
@@ -49,7 +48,7 @@ def create_app():
 
         except Exception:
             db.session.rollback()
-
+            app.logger.exception("Database health check failed")
             return jsonify({
                 "database": "disconnected",
                 "status": "error",
