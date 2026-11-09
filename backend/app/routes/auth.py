@@ -4,7 +4,7 @@ from functools import wraps
 
 import jwt
 
-from flask import (
+from flask import (  # type: ignore[reportMissingImports]
     Blueprint,
     request,
     jsonify,
@@ -12,9 +12,9 @@ from flask import (
     g
 )
 
-from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
-from werkzeug.security import (
+from sqlalchemy import text  # type: ignore[reportMissingImports]
+from sqlalchemy.exc import IntegrityError  # type: ignore[reportMissingImports]
+from werkzeug.security import (  # type: ignore[reportMissingImports]
     generate_password_hash,
     check_password_hash
 )
