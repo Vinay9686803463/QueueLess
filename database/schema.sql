@@ -1,7 +1,9 @@
--- ==========================================
--- QUEUELESS DATABASE SCHEMA
--- PostgreSQL / Supabase
--- ==========================================
+/* cspell: disable */
+
+/*
+QUEUELESS DATABASE SCHEMA
+PostgreSQL / Supabase
+*/
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
