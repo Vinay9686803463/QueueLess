@@ -1,9 +1,8 @@
-cat > .gitignore <<'EOF'
 # Python
+__pycache__/
+*.py[cod]
 venv/
 .venv/
-__pycache__/
-*.pyc
 backend/.env
 
 # Node
@@ -23,4 +22,3 @@ frontend/dist/
 # System
 .DS_Store
 Thumbs.db
-EOF
