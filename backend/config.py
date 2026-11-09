@@ -54,3 +54,5 @@ class Config:
     DEBUG = os.getenv("FLASK_DEBUG", "False").lower() in (
         "true", "1", "yes"
     )
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY") or Config.SECRET_KEY
+JWT_ACCESS_TOKEN_EXPIRES = 3600
