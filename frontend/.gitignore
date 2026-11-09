@@ -18,7 +18,9 @@ dist-ssr
 .idea
 .DS_Store
 *.suo
+# cspell:ignore ntvs
 *.ntvs*
+# cspell:ignore njsproj
 *.njsproj
 *.sln
 *.sw?
