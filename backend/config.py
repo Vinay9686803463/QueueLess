@@ -1,12 +1,17 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+
+# cspell:ignore dotenv Supabase
+try:
+    from dotenv import load_dotenv  # type: ignore[import-not-found]
+except ModuleNotFoundError:
+    def load_dotenv(*args, **kwargs):
+        return False
 
 # Load backend/.env
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
-
 
 def get_database_url():
     database_url = os.getenv("DATABASE_URL", "").strip()
@@ -14,22 +19,23 @@ def get_database_url():
     if not database_url:
         raise RuntimeError("DATABASE_URL is missing from backend/.env")
 
-    # Support older PostgreSQL URL format
     if database_url.startswith("postgres://"):
         database_url = database_url.replace(
             "postgres://", "postgresql://", 1
         )
 
-    # Require SSL for Supabase PostgreSQL connections
     parsed = urlparse(database_url)
-    query_params = dict(parse_qsl(parsed.query))
 
+    query_params = dict(parse_qsl(parsed.query))
     query_params.setdefault("sslmode", "require")
+
+    # Use the installed psycopg2-binary driver
+    if parsed.scheme == "postgresql":
+        parsed = parsed._replace(scheme="postgresql+psycopg2")
 
     return urlunparse(
         parsed._replace(query=urlencode(query_params))
     )
-
 
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY")
