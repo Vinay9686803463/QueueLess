@@ -1,40 +1,30 @@
-import importlib.util
-
-from flask import Flask, jsonify  # type: ignore[reportMissingImports]
-
-CORS = None
-if importlib.util.find_spec("flask_cors") is not None:
-    try:
-        from flask_cors import CORS  # type: ignore[reportMissingImports]
-    except ImportError:  # pragma: no cover - optional dependency
-        CORS = None
+from flask import Flask, jsonify
+from flask_cors import CORS
 
 from config import Config
-from ..extensions import db
-
-try:
-    from .database import check_database_connection  # type: ignore[reportMissingImports]
-except ImportError:  # pragma: no cover - fallback for alternate package layouts
-    from app.routes.database import check_database_connection  # type: ignore[reportMissingImports]
-
-from .auth import auth_bp
+from .extensions import db
+from .database import check_database_connection
+from .routes.auth import auth_bp
 
 
 def create_app():
-
     app = Flask(__name__)
 
+    # Load configuration
     app.config.from_object(Config)
 
+    # Initialize extensions
     db.init_app(app)
 
+    # Register authentication routes
+    app.register_blueprint(auth_bp)
+
+    # Configure CORS
     CORS(app, resources={
         r"/api/*": {
             "origins": "*"
         }
     })
-
-    app.register_blueprint(auth_bp)
 
     @app.route("/")
     def home():
@@ -53,7 +43,6 @@ def create_app():
 
     @app.route("/api/health/db")
     def database_health():
-
         try:
             check_database_connection()
 
@@ -63,9 +52,7 @@ def create_app():
             }), 200
 
         except Exception:
-
             db.session.rollback()
-
             app.logger.exception("Database health check failed")
 
             return jsonify({
