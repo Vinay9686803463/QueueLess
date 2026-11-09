@@ -1,17 +1,20 @@
+
 import os
 from pathlib import Path
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
 # cspell:ignore dotenv Supabase
 try:
-    from dotenv import load_dotenv  # type: ignore[import-not-found]
+    from dotenv import load_dotenv
 except ModuleNotFoundError:
     def load_dotenv(*args, **kwargs):
         return False
 
+
 # Load backend/.env
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
+
 
 def get_database_url():
     database_url = os.getenv("DATABASE_URL", "").strip()
@@ -31,11 +34,14 @@ def get_database_url():
 
     # Use the installed psycopg2-binary driver
     if parsed.scheme == "postgresql":
-        parsed = parsed._replace(scheme="postgresql+psycopg2")
+        parsed = parsed._replace(
+            scheme="postgresql+psycopg2"
+        )
 
     return urlunparse(
         parsed._replace(query=urlencode(query_params))
     )
+
 
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY")
@@ -43,6 +49,11 @@ class Config:
     if not SECRET_KEY:
         raise RuntimeError("SECRET_KEY is missing from backend/.env")
 
+    # JWT configuration
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY") or SECRET_KEY
+    JWT_ACCESS_TOKEN_EXPIRES = 3600
+
+    # Database configuration
     SQLALCHEMY_DATABASE_URI = get_database_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
@@ -54,5 +65,3 @@ class Config:
     DEBUG = os.getenv("FLASK_DEBUG", "False").lower() in (
         "true", "1", "yes"
     )
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY") or Config.SECRET_KEY
-JWT_ACCESS_TOKEN_EXPIRES = 3600
