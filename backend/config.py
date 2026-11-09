@@ -1,11 +1,12 @@
 
 import os
+from importlib import import_module
 from pathlib import Path
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
 # cspell:ignore dotenv Supabase
 try:
-    from dotenv import load_dotenv
+    load_dotenv = import_module("dotenv").load_dotenv
 except ModuleNotFoundError:
     def load_dotenv(*args, **kwargs):
         return False
