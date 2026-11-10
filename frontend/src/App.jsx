@@ -136,7 +136,13 @@ export default function App() {
     try {
       const data = await api(`/businesses/${business.id}/queue`);
 
-      setQueue(data.queue || []);
+      setQueue([
+        ...(data.waiting || []),
+        ...(data.called || []),
+        ...(data.completed || []),
+        ...(data.skipped || []),
+        ...(data.cancelled || []),
+      ]);
     } catch (error) {
       notify(error.message);
     }
@@ -221,9 +227,7 @@ export default function App() {
           }),
         });
       } else {
-        // Existing appointment endpoint requires JWT authentication.
-        // This request is not public customer booking.
-        data = await api("/appointments", {
+        data = await api("/public/bookings", {
           method: "POST",
           body: JSON.stringify({
             business_id: business.id,
@@ -238,8 +242,13 @@ export default function App() {
 
       setBooking(data);
 
-      if (data.tracking_code) {
-        setTrackingCode(data.tracking_code);
+      const responseTrackingCode =
+        data.tracking_code ||
+        data.queue_token?.tracking_code ||
+        data.appointment?.tracking_code;
+
+      if (responseTrackingCode) {
+        setTrackingCode(responseTrackingCode);
       }
 
       notify("Request submitted successfully");
@@ -264,7 +273,12 @@ export default function App() {
         `/public/track/${encodeURIComponent(trackingCode.trim())}`
       );
 
-      setTrackedToken(data.tracking || data);
+      const tracking = data.tracking || data;
+
+      setTrackedToken({
+        ...tracking,
+        status: tracking.queue_status || tracking.status,
+      });
     } catch (error) {
       setTrackedToken({
         error: error.message,
@@ -635,23 +649,41 @@ export default function App() {
                     Your request has been processed by the server.
                   </p>
 
-                  {booking.token_number != null && (
+                  {(booking.queue_token?.token_number ?? booking.token_number) != null && (
                     <div className="token-number">
-                      {booking.token_number}
+                      {booking.queue_token?.token_number ?? booking.token_number}
                     </div>
                   )}
 
-                  {booking.tracking_code && (
+                  {(booking.queue_token?.tracking_code || booking.tracking_code) && (
                     <p>
                       <strong>Tracking Code:</strong>{" "}
-                      {booking.tracking_code}
+                      {booking.queue_token?.tracking_code || booking.tracking_code}
                     </p>
                   )}
 
-                  {booking.estimated_wait_minutes != null && (
+                  {(booking.queue_token?.estimated_wait_minutes ??
+                    booking.estimated_wait_minutes) != null && (
                     <p>
                       <strong>Estimated Wait:</strong>{" "}
-                      {booking.estimated_wait_minutes} minutes
+                      {booking.queue_token?.estimated_wait_minutes ??
+                        booking.estimated_wait_minutes}{" "}
+                      minutes
+                    </p>
+                  )}
+
+                  {booking.appointment_id && (
+                    <p>
+                      <strong>Appointment ID:</strong> {booking.appointment_id}
+                    </p>
+                  )}
+
+                  {booking.appointment?.scheduled_at && (
+                    <p>
+                      <strong>Scheduled At:</strong>{" "}
+                      {new Date(
+                        booking.appointment.scheduled_at
+                      ).toLocaleString()}
                     </p>
                   )}
                 </div>
