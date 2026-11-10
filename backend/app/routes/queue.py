@@ -471,3 +471,500 @@ def track_queue_token(tracking_code):
             "status": "error",
             "message": "Unable to track queue entry",
         }), 500
+
+
+def _queue_paused_column_exists():
+    try:
+        result = db.session.execute(
+            text("""
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'businesses'
+                  AND column_name = 'queue_paused'
+            """)
+        ).scalar()
+        return bool(result)
+    except Exception:
+        db.session.rollback()
+        return False
+
+
+def _is_queue_paused(business_id):
+    if not _queue_paused_column_exists():
+        return False
+
+    try:
+        return bool(db.session.execute(
+            text("""
+                SELECT queue_paused
+                FROM businesses
+                WHERE id = :business_id
+            """),
+            {"business_id": business_id},
+        ).scalar())
+    except Exception:
+        db.session.rollback()
+        return False
+
+
+def _queue_token_with_service(token_id, business_id=None):
+    query = """
+        SELECT
+            qt.id::text AS id,
+            qt.business_id::text AS business_id,
+            qt.service_id::text AS service_id,
+            qt.appointment_id::text AS appointment_id,
+            qt.customer_name,
+            qt.customer_phone,
+            qt.token_number,
+            qt.queue_date,
+            qt.tracking_code,
+            qt.status,
+            qt.joined_at,
+            qt.called_at,
+            qt.service_started_at,
+            qt.completed_at,
+            qt.created_at,
+            qt.updated_at,
+            s.service_name,
+            s.duration_minutes
+        FROM queue_tokens qt
+        JOIN services s ON s.id = qt.service_id
+        WHERE qt.id = :token_id
+    """
+    params = {"token_id": token_id}
+
+    if business_id is not None:
+        query += " AND qt.business_id = :business_id"
+        params["business_id"] = business_id
+
+    row = db.session.execute(text(query), params).mappings().first()
+    if row is None:
+        return None
+
+    token = serialize_queue_token(row)
+    token["service_name"] = row["service_name"]
+    token["duration_minutes"] = row["duration_minutes"]
+    return token
+
+
+@queue_bp.route("/businesses/<business_id>/queue", methods=["GET"])
+@token_required
+def get_queue(business_id):
+    if not _is_uuid(business_id):
+        return jsonify({"status": "error", "message": "Business not found"}), 404
+
+    user_id = g.current_user["id"]
+    if business_id not in accessible_business_ids(user_id):
+        return jsonify({"status": "error", "message": "Business not found"}), 404
+
+    today = queue_date_today()
+
+    try:
+        rows = db.session.execute(
+            text("""
+                SELECT
+                    qt.id::text AS id,
+                    qt.business_id::text AS business_id,
+                    qt.service_id::text AS service_id,
+                    qt.appointment_id::text AS appointment_id,
+                    qt.customer_name,
+                    qt.customer_phone,
+                    qt.token_number,
+                    qt.queue_date,
+                    qt.tracking_code,
+                    qt.status,
+                    qt.joined_at,
+                    qt.called_at,
+                    qt.service_started_at,
+                    qt.completed_at,
+                    qt.created_at,
+                    qt.updated_at,
+                    s.service_name,
+                    s.duration_minutes
+                FROM queue_tokens qt
+                JOIN services s ON s.id = qt.service_id
+                WHERE qt.business_id = :business_id
+                  AND qt.queue_date = :queue_date
+                ORDER BY qt.token_number ASC
+            """),
+            {"business_id": business_id, "queue_date": today},
+        ).mappings().all()
+
+        waiting = []
+        called = []
+        completed = []
+        skipped = []
+        cancelled = []
+
+        waiting_ahead = 0
+        for row in rows:
+            token = serialize_queue_token(row)
+            token["service_name"] = row["service_name"]
+            token["duration_minutes"] = row["duration_minutes"]
+
+            if row["status"] == "waiting":
+                token["queue_position"] = len(waiting) + 1
+                token["estimated_wait_minutes"] = len(waiting) * (row["duration_minutes"] or 0)
+                waiting.append(token)
+            elif row["status"] in ("called", "serving"):
+                called.append(token)
+            elif row["status"] == "completed":
+                completed.append(token)
+            elif row["status"] == "skipped":
+                skipped.append(token)
+            elif row["status"] == "cancelled":
+                cancelled.append(token)
+
+        return jsonify({
+            "status": "success",
+            "business_id": business_id,
+            "queue_date": today.isoformat(),
+            "queue_paused": _is_queue_paused(business_id),
+            "summary": {
+                "total": len(rows),
+                "waiting": len(waiting),
+                "called": len(called),
+                "completed": len(completed),
+                "skipped": len(skipped),
+                "cancelled": len(cancelled),
+            },
+            "current": called[0] if called else None,
+            "waiting": waiting,
+            "called": called,
+            "completed": completed,
+            "skipped": skipped,
+            "cancelled": cancelled,
+        }), 200
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Queue retrieval failed")
+        return jsonify({"status": "error", "message": "Unable to retrieve queue"}), 500
+
+
+@queue_bp.route("/businesses/<business_id>/queue/call-next", methods=["POST"])
+@token_required
+def call_next_customer(business_id):
+    if not _is_uuid(business_id):
+        return jsonify({"status": "error", "message": "Business not found"}), 404
+
+    user_id = g.current_user["id"]
+    if business_id not in accessible_business_ids(user_id):
+        return jsonify({"status": "error", "message": "Business not found"}), 404
+
+    if _is_queue_paused(business_id):
+        return jsonify({"status": "error", "message": "Queue is paused"}), 409
+
+    today = queue_date_today()
+
+    try:
+        active = db.session.execute(
+            text("""
+                SELECT id::text AS id
+                FROM queue_tokens
+                WHERE business_id = :business_id
+                  AND queue_date = :queue_date
+                  AND status IN ('called', 'serving')
+                LIMIT 1
+                FOR UPDATE
+            """),
+            {"business_id": business_id, "queue_date": today},
+        ).mappings().first()
+
+        if active:
+            return jsonify({
+                "status": "error",
+                "message": "A customer is already being served",
+            }), 409
+
+        next_token = db.session.execute(
+            text("""
+                SELECT id::text AS id
+                FROM queue_tokens
+                WHERE business_id = :business_id
+                  AND queue_date = :queue_date
+                  AND status = 'waiting'
+                ORDER BY token_number ASC
+                LIMIT 1
+                FOR UPDATE
+            """),
+            {"business_id": business_id, "queue_date": today},
+        ).mappings().first()
+
+        if not next_token:
+            return jsonify({"status": "error", "message": "No waiting customers in queue"}), 404
+
+        db.session.execute(
+            text("""
+                UPDATE queue_tokens
+                SET status = 'called',
+                    called_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = :token_id
+            """),
+            {"token_id": next_token["id"]},
+        )
+
+        db.session.commit()
+
+        token = _queue_token_with_service(next_token["id"], business_id)
+        return jsonify({
+            "status": "success",
+            "message": "Next customer called",
+            "queue_token": token,
+        }), 200
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Call-next failed")
+        return jsonify({"status": "error", "message": "Unable to call next customer"}), 500
+
+
+@queue_bp.route("/businesses/<business_id>/queue/<token_id>/complete", methods=["POST"])
+@token_required
+def complete_queue_token(business_id, token_id):
+    if not _is_uuid(business_id) or not _is_uuid(token_id):
+        return jsonify({"status": "error", "message": "Queue entry not found"}), 404
+
+    user_id = g.current_user["id"]
+    if business_id not in accessible_business_ids(user_id):
+        return jsonify({"status": "error", "message": "Business not found"}), 404
+
+    try:
+        token = db.session.execute(
+            text("""
+                SELECT id::text AS id, status
+                FROM queue_tokens
+                WHERE id = :token_id
+                  AND business_id = :business_id
+                FOR UPDATE
+            """),
+            {"token_id": token_id, "business_id": business_id},
+        ).mappings().first()
+
+        if not token:
+            return jsonify({"status": "error", "message": "Queue entry not found"}), 404
+
+        if token["status"] not in ("called", "serving"):
+            return jsonify({
+                "status": "error",
+                "message": "Only called or serving customers can be completed",
+            }), 409
+
+        db.session.execute(
+            text("""
+                UPDATE queue_tokens
+                SET status = 'completed',
+                    completed_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = :token_id
+            """),
+            {"token_id": token_id},
+        )
+        db.session.commit()
+
+        updated = _queue_token_with_service(token_id, business_id)
+        return jsonify({
+            "status": "success",
+            "message": "Customer completed",
+            "queue_token": updated,
+        }), 200
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Complete queue entry failed")
+        return jsonify({"status": "error", "message": "Unable to complete queue entry"}), 500
+
+
+@queue_bp.route("/businesses/<business_id>/queue/<token_id>/skip", methods=["POST"])
+@token_required
+def skip_queue_token(business_id, token_id):
+    if not _is_uuid(business_id) or not _is_uuid(token_id):
+        return jsonify({"status": "error", "message": "Queue entry not found"}), 404
+
+    user_id = g.current_user["id"]
+    if business_id not in accessible_business_ids(user_id):
+        return jsonify({"status": "error", "message": "Business not found"}), 404
+
+    try:
+        token = db.session.execute(
+            text("""
+                SELECT id::text AS id, status
+                FROM queue_tokens
+                WHERE id = :token_id
+                  AND business_id = :business_id
+                FOR UPDATE
+            """),
+            {"token_id": token_id, "business_id": business_id},
+        ).mappings().first()
+
+        if not token:
+            return jsonify({"status": "error", "message": "Queue entry not found"}), 404
+
+        if token["status"] not in ("waiting", "called", "serving"):
+            return jsonify({
+                "status": "error",
+                "message": "This queue entry cannot be skipped",
+            }), 409
+
+        db.session.execute(
+            text("""
+                UPDATE queue_tokens
+                SET status = 'skipped',
+                    updated_at = NOW()
+                WHERE id = :token_id
+            """),
+            {"token_id": token_id},
+        )
+        db.session.commit()
+
+        updated = _queue_token_with_service(token_id, business_id)
+        return jsonify({
+            "status": "success",
+            "message": "Customer skipped",
+            "queue_token": updated,
+        }), 200
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Skip queue entry failed")
+        return jsonify({"status": "error", "message": "Unable to skip queue entry"}), 500
+
+
+@queue_bp.route("/businesses/<business_id>/queue/<token_id>/cancel", methods=["POST"])
+@token_required
+def cancel_queue_token(business_id, token_id):
+    if not _is_uuid(business_id) or not _is_uuid(token_id):
+        return jsonify({"status": "error", "message": "Queue entry not found"}), 404
+
+    user_id = g.current_user["id"]
+    if business_id not in accessible_business_ids(user_id):
+        return jsonify({"status": "error", "message": "Business not found"}), 404
+
+    try:
+        token = db.session.execute(
+            text("""
+                SELECT id::text AS id, status
+                FROM queue_tokens
+                WHERE id = :token_id
+                  AND business_id = :business_id
+                FOR UPDATE
+            """),
+            {"token_id": token_id, "business_id": business_id},
+        ).mappings().first()
+
+        if not token:
+            return jsonify({"status": "error", "message": "Queue entry not found"}), 404
+
+        if token["status"] in ("completed", "skipped", "cancelled"):
+            return jsonify({
+                "status": "error",
+                "message": "This queue entry cannot be cancelled",
+            }), 409
+
+        db.session.execute(
+            text("""
+                UPDATE queue_tokens
+                SET status = 'cancelled',
+                    updated_at = NOW()
+                WHERE id = :token_id
+            """),
+            {"token_id": token_id},
+        )
+        db.session.commit()
+
+        updated = _queue_token_with_service(token_id, business_id)
+        return jsonify({
+            "status": "success",
+            "message": "Customer cancelled",
+            "queue_token": updated,
+        }), 200
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Cancel queue entry failed")
+        return jsonify({"status": "error", "message": "Unable to cancel queue entry"}), 500
+
+
+@queue_bp.route("/businesses/<business_id>/queue/pause", methods=["POST"])
+@token_required
+def pause_queue(business_id):
+    if not _is_uuid(business_id):
+        return jsonify({"status": "error", "message": "Business not found"}), 404
+
+    user_id = g.current_user["id"]
+    if business_id not in accessible_business_ids(user_id):
+        return jsonify({"status": "error", "message": "Business not found"}), 404
+
+    if not _queue_paused_column_exists():
+        return jsonify({
+            "status": "error",
+            "message": "Queue pause requires database migration 001_add_queue_paused_to_businesses.sql",
+        }), 503
+
+    try:
+        db.session.execute(
+            text("""
+                UPDATE businesses
+                SET queue_paused = TRUE,
+                    updated_at = NOW()
+                WHERE id = :business_id
+            """),
+            {"business_id": business_id},
+        )
+        db.session.commit()
+
+        return jsonify({
+            "status": "success",
+            "message": "Queue paused",
+            "business_id": business_id,
+            "queue_paused": True,
+        }), 200
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Pause queue failed")
+        return jsonify({"status": "error", "message": "Unable to pause queue"}), 500
+
+
+@queue_bp.route("/businesses/<business_id>/queue/resume", methods=["POST"])
+@token_required
+def resume_queue(business_id):
+    if not _is_uuid(business_id):
+        return jsonify({"status": "error", "message": "Business not found"}), 404
+
+    user_id = g.current_user["id"]
+    if business_id not in accessible_business_ids(user_id):
+        return jsonify({"status": "error", "message": "Business not found"}), 404
+
+    if not _queue_paused_column_exists():
+        return jsonify({
+            "status": "error",
+            "message": "Queue resume requires database migration 001_add_queue_paused_to_businesses.sql",
+        }), 503
+
+    try:
+        db.session.execute(
+            text("""
+                UPDATE businesses
+                SET queue_paused = FALSE,
+                    updated_at = NOW()
+                WHERE id = :business_id
+            """),
+            {"business_id": business_id},
+        )
+        db.session.commit()
+
+        return jsonify({
+            "status": "success",
+            "message": "Queue resumed",
+            "business_id": business_id,
+            "queue_paused": False,
+        }), 200
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Resume queue failed")
+        return jsonify({"status": "error", "message": "Unable to resume queue"}), 500
