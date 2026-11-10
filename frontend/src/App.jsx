@@ -66,7 +66,7 @@ export default function App() {
   const [selectedService, setSelectedService] = useState("");
   const [appointmentTime, setAppointmentTime] = useState("");
 
-  const [mode, setMode] = useState("appointment");
+  const [mode, setMode] = useState("walk-in");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -366,6 +366,7 @@ export default function App() {
     setBusiness(null);
     setServices([]);
     setQueue([]);
+    setMode("walk-in");
 
     setRole("customer");
 
@@ -592,8 +593,10 @@ export default function App() {
                   value={mode}
                   onChange={(event) => setMode(event.target.value)}
                 >
-                  <option value="appointment">Appointment</option>
                   <option value="walk-in">Walk-in</option>
+                  {token && (
+                    <option value="appointment">Appointment</option>
+                  )}
                 </select>
 
                 {mode === "appointment" && (
