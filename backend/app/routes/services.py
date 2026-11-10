@@ -2,6 +2,7 @@ import uuid as uuid_lib
 
 from flask import Blueprint, request, jsonify, g, current_app
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from ..extensions import db
 from .auth import token_required
@@ -172,6 +173,13 @@ def create_service(business_id):
             "service": serialize_service(result),
         }), 201
 
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({
+            "status": "error",
+            "message": "A service with this name already exists for this business",
+        }), 409
+
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Service creation failed")
@@ -304,6 +312,13 @@ def update_service(business_id, service_id):
             "message": "Service updated successfully",
             "service": serialize_service(service),
         }), 200
+
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({
+            "status": "error",
+            "message": "A service with this name already exists for this business",
+        }), 409
 
     except Exception:
         db.session.rollback()

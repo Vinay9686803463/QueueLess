@@ -1253,13 +1253,33 @@
 /* Responsive layouts */
 
 @media (max-width: 900px) {
-  .topbar { padding: 0 3%; }
-  .main-content { padding: 0 22px; }
-  .hero { gap: 15px; }
-  .hero-visual { transform: scale(.9); }
-  .admin-content-grid { grid-template-columns: 1fr; }
-  .services-admin-grid { grid-template-columns: repeat(2, 1fr); }
-  .admin-stats { grid-template-columns: repeat(2, 1fr); }
+  .topbar {
+    padding: 0 3%;
+  }
+
+  .main-content {
+    padding: 0 22px;
+  }
+
+  .hero {
+    gap: 15px;
+  }
+
+  .hero-visual {
+    transform: scale(.9);
+  }
+
+  .admin-content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .services-admin-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .admin-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 650px) {
