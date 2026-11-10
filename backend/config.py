@@ -2,7 +2,7 @@
 import os
 from importlib import import_module
 from pathlib import Path
-from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+from urllib.parse import quote, unquote, urlparse, parse_qsl, urlencode, urlunparse
 
 # cspell:ignore dotenv Supabase
 try:
@@ -29,6 +29,28 @@ def get_database_url():
         )
 
     parsed = urlparse(database_url)
+
+    # Percent-encode credentials so passwords containing special characters
+    # such as @, :, or / are not misinterpreted as URL delimiters.
+    if parsed.username is not None:
+        username = quote(unquote(parsed.username), safe="")
+        password = (
+            quote(unquote(parsed.password), safe="")
+            if parsed.password is not None
+            else None
+        )
+        netloc = username
+
+        if password is not None:
+            netloc += ":" + password
+
+        if parsed.hostname:
+            netloc += "@" + parsed.hostname
+
+        if parsed.port:
+            netloc += ":" + str(parsed.port)
+
+        parsed = parsed._replace(netloc=netloc)
 
     query_params = dict(parse_qsl(parsed.query))
     query_params.setdefault("sslmode", "require")
