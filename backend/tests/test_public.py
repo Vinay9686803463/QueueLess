@@ -1,4 +1,5 @@
 import os
+from tests.integration_settings import integration_tests_enabled
 import uuid
 from datetime import datetime, timezone, timedelta
 
@@ -6,7 +7,7 @@ import pytest
 
 from sqlalchemy import text
 
-RUN_INTEGRATION = os.getenv("QUEUELESS_RUN_INTEGRATION_TESTS") == "1"
+RUN_INTEGRATION = integration_tests_enabled()
 
 
 def test_public_routes_are_registered():

@@ -28,9 +28,9 @@ def create_app():
 
     CORS(app, resources={
         r"/api/*": {
-            "origins": "*"
+            "origins": app.config.get("CORS_ORIGINS", ["http://localhost:5173"])
         }
-    })
+    }, supports_credentials=True)
 
     @app.route("/")
     def home():

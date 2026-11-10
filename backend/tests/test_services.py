@@ -1,4 +1,5 @@
 import os
+from tests.integration_settings import integration_tests_enabled
 import uuid
 
 import pytest
@@ -67,7 +68,7 @@ def test_service_routes_are_registered():
     assert "/api/businesses/<business_id>/services/<service_id>" in rules
 
 
-RUN_INTEGRATION = os.getenv("QUEUELESS_RUN_INTEGRATION_TESTS") == "1"
+RUN_INTEGRATION = integration_tests_enabled()
 pytestmark_integration = [
     pytest.mark.integration,
     pytest.mark.skipif(

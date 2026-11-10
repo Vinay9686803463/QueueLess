@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from ..extensions import db
+from ..utils.rate_limit import rate_limiter
 from .auth import token_required
 from .appointments import accessible_business_ids
 
@@ -276,6 +277,7 @@ def check_in_appointment(appointment_id):
 
 
 @queue_bp.route("/public/walk-in", methods=["POST"])
+@rate_limiter.limit(20, 60)
 def walk_in():
     data = request.get_json(silent=True)
 

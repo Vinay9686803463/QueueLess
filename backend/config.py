@@ -45,14 +45,33 @@ def get_database_url():
 
 
 class Config:
+    ENV = os.getenv("FLASK_ENV", "development").lower()
     SECRET_KEY = os.getenv("SECRET_KEY")
 
     if not SECRET_KEY:
         raise RuntimeError("SECRET_KEY is missing from backend/.env")
 
+    PLACEHOLDER_SECRETS = {
+        "change-me",
+        "change-me-in-production",
+        "secret",
+        "password",
+        "123456",
+    }
+
+    if ENV == "production":
+        if SECRET_KEY in PLACEHOLDER_SECRETS or len(SECRET_KEY) < 32:
+            raise RuntimeError("SECRET_KEY is weak or a placeholder in production.")
+
     # JWT configuration
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY") or SECRET_KEY
+    if ENV == "production" and (JWT_SECRET_KEY in PLACEHOLDER_SECRETS or len(JWT_SECRET_KEY) < 32):
+        raise RuntimeError("JWT_SECRET_KEY is weak or a placeholder in production.")
+
     JWT_ACCESS_TOKEN_EXPIRES = 3600
+
+    # CORS
+    CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 
     # Database configuration
     SQLALCHEMY_DATABASE_URI = get_database_url()
