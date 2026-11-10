@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from ..extensions import db
+from ..utils.rate_limit import rate_limiter
 from .appointments import (
     parse_datetime,
     validate_customer_fields,
@@ -127,6 +128,7 @@ def _get_public_business(identifier):
 
 
 @public_bp.route("/bookings", methods=["POST"])
+@rate_limiter.limit(20, 60)
 def public_book_appointment():
     data = request.get_json(silent=True)
 

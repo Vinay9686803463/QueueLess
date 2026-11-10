@@ -20,6 +20,7 @@ from werkzeug.security import (  # type: ignore[reportMissingImports]
 )
 
 from ..extensions import db
+from ..utils.rate_limit import rate_limiter
 
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
@@ -104,6 +105,7 @@ def token_required(func):
 
 
 @auth_bp.route("/register", methods=["POST"])
+@rate_limiter.limit(5, 60)
 def register():
 
     data = request.get_json(silent=True) or {}
@@ -209,6 +211,7 @@ def register():
 
 
 @auth_bp.route("/login", methods=["POST"])
+@rate_limiter.limit(10, 60)
 def login():
 
     data = request.get_json(silent=True) or {}

@@ -50,6 +50,7 @@ export default function App() {
 
   const [services, setServices] = useState([]);
   const [queue, setQueue] = useState([]);
+  const [queuePaused, setQueuePaused] = useState(false);
 
   const [booking, setBooking] = useState(null);
 
@@ -115,6 +116,7 @@ export default function App() {
 
       setBooking(null);
       setQueue([]);
+      setQueuePaused(false);
 
       notify("Business loaded successfully");
     } catch (error) {
@@ -143,6 +145,8 @@ export default function App() {
         ...(data.skipped || []),
         ...(data.cancelled || []),
       ]);
+
+      setQueuePaused(Boolean(data.queue_paused));
     } catch (error) {
       notify(error.message);
     }
@@ -341,6 +345,7 @@ export default function App() {
         method: "POST",
       });
 
+      setQueuePaused(true);
       notify("Queue paused");
     } catch (error) {
       notify(error.message);
@@ -359,6 +364,7 @@ export default function App() {
         method: "POST",
       });
 
+      setQueuePaused(false);
       notify("Queue resumed");
     } catch (error) {
       notify(error.message);
@@ -380,6 +386,7 @@ export default function App() {
     setBusiness(null);
     setServices([]);
     setQueue([]);
+    setQueuePaused(false);
     setMode("walk-in");
 
     setRole("customer");
@@ -861,7 +868,11 @@ export default function App() {
                       Refresh Queue
                     </button>
 
-                    <button className="btn btn-success" onClick={callNext}>
+                    <button
+                      className="btn btn-success"
+                      onClick={callNext}
+                      disabled={queuePaused}
+                    >
                       Call Next
                     </button>
 
@@ -891,7 +902,9 @@ export default function App() {
                       </p>
                     </div>
 
-                    <span className="badge">Live Dashboard</span>
+                    <span className="badge">
+                      {queuePaused ? "Paused" : "Live Dashboard"}
+                    </span>
                   </div>
 
                   <div className="table-wrapper">
