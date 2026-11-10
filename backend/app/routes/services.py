@@ -126,6 +126,23 @@ def create_service(business_id):
     if business_id not in _accessible_business_ids(user_id):
         return jsonify({"status": "error", "message": "Business not found"}), 404
 
+    try:
+        business = db.session.execute(
+            text("""
+                SELECT is_active
+                FROM businesses
+                WHERE id = :business_id
+            """),
+            {"business_id": business_id},
+        ).mappings().first()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Business lookup failed")
+        return jsonify({"status": "error", "message": "Unable to verify business"}), 500
+
+    if not business or not business["is_active"]:
+        return jsonify({"status": "error", "message": "Business is not active"}), 400
+
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return jsonify({"status": "error", "message": "A valid JSON object is required"}), 400

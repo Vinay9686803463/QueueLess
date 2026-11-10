@@ -15,6 +15,114 @@ business_bp = Blueprint(
     url_prefix="/api/businesses"
 )
 
+public_business_bp = Blueprint(
+    "public_business",
+    __name__,
+    url_prefix="/api/public/business"
+)
+
+
+def _business_slug(name):
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+@public_business_bp.route("/<slug>", methods=["GET"])
+def get_public_business(slug):
+    try:
+        rows = db.session.execute(
+            text("""
+                SELECT
+                    id::text AS id,
+                    business_name,
+                    business_type,
+                    address
+                FROM businesses
+                WHERE is_active = TRUE
+                  AND lower(trim(both '-' from regexp_replace(
+                      business_name,
+                      '[^a-zA-Z0-9]+',
+                      '-',
+                      'g'
+                  ))) = :slug
+                ORDER BY created_at DESC
+                LIMIT 2
+            """),
+            {"slug": slug.lower()},
+        ).mappings().all()
+
+        if len(rows) != 1:
+            return jsonify({
+                "status": "error",
+                "message": "Business not found or business slug is ambiguous",
+            }), 404
+
+        business = dict(rows[0])
+        business["slug"] = _business_slug(business["business_name"])
+
+        return jsonify({
+            "status": "success",
+            "business": business,
+        }), 200
+    except Exception:
+        current_app.logger.exception("Public business lookup failed")
+        return jsonify({
+            "status": "error",
+            "message": "Unable to retrieve business",
+        }), 500
+
+
+@public_business_bp.route("/<slug>/services", methods=["GET"])
+def get_public_business_services(slug):
+    try:
+        businesses = db.session.execute(
+            text("""
+                SELECT id::text AS id
+                FROM businesses
+                WHERE is_active = TRUE
+                  AND lower(trim(both '-' from regexp_replace(
+                      business_name,
+                      '[^a-zA-Z0-9]+',
+                      '-',
+                      'g'
+                  ))) = :slug
+                ORDER BY created_at DESC
+                LIMIT 2
+            """),
+            {"slug": slug.lower()},
+        ).mappings().all()
+
+        if len(businesses) != 1:
+            return jsonify({
+                "status": "error",
+                "message": "Business not found or business slug is ambiguous",
+            }), 404
+
+        services = db.session.execute(
+            text("""
+                SELECT
+                    id::text AS id,
+                    service_name,
+                    duration_minutes
+                FROM services
+                WHERE business_id = :business_id
+                  AND is_active = TRUE
+                ORDER BY created_at ASC
+            """),
+            {"business_id": businesses[0]["id"]},
+        ).mappings().all()
+
+        return jsonify({
+            "status": "success",
+            "count": len(services),
+            "services": [dict(service) for service in services],
+        }), 200
+    except Exception:
+        current_app.logger.exception("Public business services lookup failed")
+        return jsonify({
+            "status": "error",
+            "message": "Unable to retrieve business services",
+        }), 500
+
 
 def _is_uuid(value):
     try:
