@@ -29,26 +29,44 @@ def _business_slug(name):
 @public_business_bp.route("/<slug>", methods=["GET"])
 def get_public_business(slug):
     try:
-        rows = db.session.execute(
-            text("""
-                SELECT
-                    id::text AS id,
-                    business_name,
-                    business_type,
-                    address
-                FROM businesses
-                WHERE is_active = TRUE
-                  AND lower(trim(both '-' from regexp_replace(
-                      business_name,
-                      '[^a-zA-Z0-9]+',
-                      '-',
-                      'g'
-                  ))) = :slug
-                ORDER BY created_at DESC
-                LIMIT 2
-            """),
-            {"slug": slug.lower()},
-        ).mappings().all()
+        slug = slug.strip()
+
+        if _is_uuid(slug):
+            rows = db.session.execute(
+                text("""
+                    SELECT
+                        id::text AS id,
+                        business_name,
+                        business_type,
+                        address
+                    FROM businesses
+                    WHERE is_active = TRUE
+                      AND id = :business_id
+                    LIMIT 1
+                """),
+                {"business_id": slug},
+            ).mappings().all()
+        else:
+            rows = db.session.execute(
+                text("""
+                    SELECT
+                        id::text AS id,
+                        business_name,
+                        business_type,
+                        address
+                    FROM businesses
+                    WHERE is_active = TRUE
+                      AND lower(trim(both '-' from regexp_replace(
+                          business_name,
+                          '[^a-zA-Z0-9]+',
+                          '-',
+                          'g'
+                      ))) = :slug
+                    ORDER BY created_at DESC
+                    LIMIT 2
+                """),
+                {"slug": slug.lower()},
+            ).mappings().all()
 
         if len(rows) != 1:
             return jsonify({
@@ -74,22 +92,36 @@ def get_public_business(slug):
 @public_business_bp.route("/<slug>/services", methods=["GET"])
 def get_public_business_services(slug):
     try:
-        businesses = db.session.execute(
-            text("""
-                SELECT id::text AS id
-                FROM businesses
-                WHERE is_active = TRUE
-                  AND lower(trim(both '-' from regexp_replace(
-                      business_name,
-                      '[^a-zA-Z0-9]+',
-                      '-',
-                      'g'
-                  ))) = :slug
-                ORDER BY created_at DESC
-                LIMIT 2
-            """),
-            {"slug": slug.lower()},
-        ).mappings().all()
+        slug = slug.strip()
+
+        if _is_uuid(slug):
+            businesses = db.session.execute(
+                text("""
+                    SELECT id::text AS id
+                    FROM businesses
+                    WHERE is_active = TRUE
+                      AND id = :business_id
+                    LIMIT 1
+                """),
+                {"business_id": slug},
+            ).mappings().all()
+        else:
+            businesses = db.session.execute(
+                text("""
+                    SELECT id::text AS id
+                    FROM businesses
+                    WHERE is_active = TRUE
+                      AND lower(trim(both '-' from regexp_replace(
+                          business_name,
+                          '[^a-zA-Z0-9]+',
+                          '-',
+                          'g'
+                      ))) = :slug
+                    ORDER BY created_at DESC
+                    LIMIT 2
+                """),
+                {"slug": slug.lower()},
+            ).mappings().all()
 
         if len(businesses) != 1:
             return jsonify({
