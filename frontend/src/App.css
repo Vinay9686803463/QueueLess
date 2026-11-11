@@ -622,3 +622,11 @@
     font-size: 19px;
   }
 }
+/* Admin layout */
+.admin-layout { display: grid; grid-template-columns: 220px 1fr; gap: 20px; }
+.admin-sidebar { background: #0f172a; color: #fff; border-radius: 12px; padding: 16px; min-height: 400px; }
+.sidebar-brand { font-weight: 700; font-size: 18px; margin-bottom: 16px; }
+.sidebar-nav { display: flex; flex-direction: column; gap: 8px; }
+.sidebar-nav span { padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.05); }
+.admin-main { display: flex; flex-direction: column; gap: 16px; }
+@media (max-width: 768px) { .admin-layout { grid-template-columns: 1fr; } }
