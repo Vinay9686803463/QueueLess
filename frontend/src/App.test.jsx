@@ -432,6 +432,123 @@ describe("QueueLess frontend", () => {
     expect(await screen.findByText("Queue resumed")).toBeInTheDocument();
   });
 
+  it("shows a conflict error when booking fails with 409", async () => {
+    mockFetch([
+      ["/api/health", { data: {} }],
+      ["/api/public/business/demo-clinic/services", {
+        data: {
+          status: "success",
+          services: [{ id: "service-1", service_name: "Haircut", duration_minutes: 30 }],
+        },
+      }],
+      ["/api/public/business/demo-clinic", {
+        data: {
+          status: "success",
+          business: {
+            id: "business-1",
+            business_name: "Demo Clinic",
+            business_type: "Clinic",
+          },
+        },
+      }],
+      ["/api/public/bookings", { status: 409, data: { message: "This appointment conflicts with an existing appointment" } }],
+    ]);
+
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /load business/i })[0]);
+    await screen.findByText("Demo Clinic");
+
+    await user.selectOptions(screen.getAllByRole("combobox")[0], "service-1");
+    await user.type(screen.getByPlaceholderText(/enter your name/i), "John Doe");
+    await user.type(screen.getByPlaceholderText(/enter phone number/i), "1234567890");
+    await user.selectOptions(screen.getAllByRole("combobox")[1], "appointment");
+
+    const dateTimeInput = document.querySelector('input[type="datetime-local"]');
+    await user.type(dateTimeInput, "2026-11-12T10:00");
+
+    await user.click(screen.getByRole("button", { name: /submit booking/i }));
+
+    expect(await screen.findByText("This appointment conflicts with an existing appointment")).toBeInTheDocument();
+  });
+
+  it("shows a service unavailable error when walk-in fails with 503", async () => {
+    mockFetch([
+      ["/api/health", { data: {} }],
+      ["/api/public/business/demo-clinic/services", {
+        data: {
+          status: "success",
+          services: [{ id: "service-1", service_name: "Haircut", duration_minutes: 30 }],
+        },
+      }],
+      ["/api/public/business/demo-clinic", {
+        data: {
+          status: "success",
+          business: {
+            id: "business-1",
+            business_name: "Demo Clinic",
+            business_type: "Clinic",
+          },
+        },
+      }],
+      ["/api/public/walk-in", { status: 503, data: { message: "Queue is full." } }],
+    ]);
+
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /load business/i })[0]);
+    await screen.findByText("Demo Clinic");
+
+    await user.selectOptions(screen.getAllByRole("combobox")[0], "service-1");
+    await user.type(screen.getByPlaceholderText(/enter your name/i), "Jane Doe");
+    await user.type(screen.getByPlaceholderText(/enter phone number/i), "0987654321");
+
+    await user.click(screen.getByRole("button", { name: /submit booking/i }));
+
+    expect(await screen.findByText("Queue is full.")).toBeInTheDocument();
+  });
+
+  it("shows an error when pausing the queue fails", async () => {
+    localStorage.setItem("queueless_token", "admin-token");
+
+    mockFetch([
+      ["/api/public/business/demo-clinic", {
+        data: {
+          status: "success",
+          business: {
+            id: "business-1",
+            business_name: "Demo Clinic",
+            business_type: "Clinic",
+          },
+        },
+      }],
+      ["/api/public/business/demo-clinic/services", { data: { status: "success", services: [] } }],
+      ["/api/businesses/business-1/queue/pause", { status: 503, data: { message: "Queue pause requires database migration" } }],
+      ["/api/businesses/business-1/queue", {
+        data: {
+          status: "success",
+          queue_paused: false,
+          waiting: [],
+          called: [],
+          completed: [],
+          skipped: [],
+          cancelled: [],
+        },
+      }],
+      ["/api/health", { data: {} }],
+    ]);
+
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /switch to admin/i })[0]);
+    await user.click(screen.getAllByRole("button", { name: /load business/i })[0]);
+    await screen.findByText("Selected: Demo Clinic");
+
+    await user.click(screen.getByRole("button", { name: /pause queue/i }));
+
+    expect(await screen.findByText("Queue pause requires database migration")).toBeInTheDocument();
+  });
+
   it("logs out and returns to the admin login view", async () => {
     localStorage.setItem("queueless_token", "admin-token");
 
