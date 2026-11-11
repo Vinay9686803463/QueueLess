@@ -13,7 +13,7 @@ function jsonResponse(data, status = 200) {
 }
 
 function mockFetch(handlers) {
-  return vi.spyOn(global, "fetch").mockImplementation(async (url) => {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
     for (const [pattern, response] of handlers) {
       if (String(url).includes(pattern)) {
         return jsonResponse(response.data, response.status ?? 200);

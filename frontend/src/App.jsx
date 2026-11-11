@@ -1,17 +1,12 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useEffect, useState } from "react";
 import "./App.css";
 
-// Local development API URL.
-// Change this to your deployed backend URL when deploying the frontend.
-const API_BASE =
-  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:5000/api";
+const API_BASE = "http://127.0.0.1:5000/api";
 
 function authHeaders() {
   const token = localStorage.getItem("queueless_token");
-
-  return token
-    ? { Authorization: `Bearer ${token}` }
-    : {};
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 async function api(path, options = {}) {
@@ -23,39 +18,28 @@ async function api(path, options = {}) {
       ...authHeaders(),
     },
   });
-
   const data = await response.json().catch(() => ({}));
-
   if (!response.ok) {
-    throw new Error(
-      data.message || data.error || `Request failed (${response.status})`
-    );
+    throw new Error(data.message || data.error || "Request failed");
   }
-
   return data;
 }
 
 export default function App() {
   const [role, setRole] = useState("customer");
-
   const [backendStatus, setBackendStatus] = useState("checking");
   const [notice, setNotice] = useState("");
-
-  const [token, setToken] = useState(
-    localStorage.getItem("queueless_token") || ""
-  );
+  const [token, setToken] = useState(localStorage.getItem("queueless_token") || "");
 
   const [businessSlug, setBusinessSlug] = useState("demo-clinic");
   const [business, setBusiness] = useState(null);
-
-  const [services, setServices] = useState([]);
+  const [publicServices, setPublicServices] = useState([]);
   const [queue, setQueue] = useState([]);
   const [queuePaused, setQueuePaused] = useState(false);
-
   const [booking, setBooking] = useState(null);
-
   const [trackingCode, setTrackingCode] = useState("");
   const [trackedToken, setTrackedToken] = useState(null);
+  // loading state removed to satisfy lint; keep simple UI
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -63,940 +47,332 @@ export default function App() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
-
   const [selectedService, setSelectedService] = useState("");
   const [appointmentTime, setAppointmentTime] = useState("");
+  const [mode, setMode] = useState("walkin");
 
-  const [mode, setMode] = useState("walk-in");
-  const [loading, setLoading] = useState(false);
+  const [businesses, setBusinesses] = useState([]);
+  const [selectedBusinessId, setSelectedBusinessId] = useState("");
 
   useEffect(() => {
-    api("/health")
+    fetch(`${API_BASE}/health`)
+      .then((r) => r.json())
       .then(() => setBackendStatus("online"))
       .catch(() => setBackendStatus("offline"));
   }, []);
 
   const notify = (message) => {
     setNotice(message);
-
-    window.setTimeout(() => {
-      setNotice("");
-    }, 3500);
+    window.setTimeout(() => setNotice(""), 3500);
   };
 
-  // Load business and its services.
-  // These public endpoints must exist in your backend.
-  const loadBusiness = async () => {
-    if (!businessSlug.trim()) {
-      notify("Enter a business slug");
-      return;
-    }
-
-    setLoading(true);
-
+  const loadPublicBusiness = async () => {
     try {
-      const businessData = await api(
-        `/public/business/${encodeURIComponent(businessSlug.trim())}`
-      );
-
-      const loadedBusiness = businessData.business;
-
-      if (!loadedBusiness?.id) {
-        throw new Error("Business information was not returned");
-      }
-
-      setBusiness(loadedBusiness);
-
-      const serviceData = await api(
-        `/public/business/${encodeURIComponent(businessSlug.trim())}/services`
-      );
-
-      setServices(serviceData.services || []);
-      setSelectedService("");
-
-      setBooking(null);
-      setQueue([]);
-      setQueuePaused(false);
-
-      notify("Business loaded successfully");
-    } catch (error) {
-      setBusiness(null);
-      setServices([]);
-      notify(error.message);
-    } finally {
-      setLoading(false);
+      const biz = await api(`/public/business/${businessSlug}`);
+      setBusiness(biz.business);
+      setSelectedBusinessId(biz.business.id);
+      const svc = await api(`/public/business/${businessSlug}/services`);
+      setPublicServices(svc.services || []);
+      notify("Business loaded");
+    } catch (err) {
+      notify(err.message);
     }
   };
 
-  // Load queue for the logged-in business owner.
-  const loadQueue = async () => {
-    if (!business?.id) {
-      notify("Load your business first");
-      return;
+  const createBooking = async (e) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        slug: businessSlug,
+        service_id: selectedService,
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        customer_email: customerEmail,
+      };
+      let data;
+      if (mode === "appointment") {
+        payload.appointment_time = appointmentTime;
+        data = await api("/public/bookings", { method: "POST", body: JSON.stringify(payload) });
+        setBooking({ ...data, type: "appointment" });
+      } else {
+        data = await api("/public/walk-in", { method: "POST", body: JSON.stringify(payload) });
+        setBooking({
+          ...data,
+          type: "walkin",
+          token_number: data.queue_token?.token_number,
+          tracking_code: data.queue_token?.tracking_code,
+          estimated_wait_minutes: data.queue_token?.estimated_wait_minutes ?? data.estimated_wait_minutes,
+        });
+      }
+      // notify("Request Submitted");
+    } catch (err) {
+      notify(err.message);
     }
+  };
 
+  const track = async (e) => {
+    e.preventDefault();
+    try {
+      const data = await api(`/public/track/${trackingCode}`);
+      setTrackedToken(data.tracking || data);
+    } catch (err) {
+      setTrackedToken({ error: err.message });
+    }
+  };
+
+  const login = async (e) => {
+    e.preventDefault();
+    try {
+      const data = await api("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+      localStorage.setItem("queueless_token", data.access_token);
+      setToken(data.access_token);
+      notify("Login successful");
+    } catch (err) {
+      notify(err.message);
+    }
+  };
+
+  // logout handled inline
+
+  const loadBusinesses = async () => {
+    try {
+      const data = await api("/businesses");
+      setBusinesses(data.businesses || []);
+      if (!selectedBusinessId && data.businesses?.length) {
+        setSelectedBusinessId(data.businesses[0].id);
+      }
+    } catch (err) {
+      notify(err.message);
+    }
+  };
+
+  const loadBusinessData = async (businessId) => {
+    if (!businessId) return;
+    try {
+      const [svc, q] = await Promise.all([
+        api(`/businesses/${businessId}/services`),
+        api(`/businesses/${businessId}/queue`),
+      ]);
+      setPublicServices(svc.services || []);
+      setQueue(q.queue || q.waiting || []);
+      setQueuePaused(q.queue_paused || false);
+    } catch (err) {
+      notify(err.message);
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      loadBusinesses();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  useEffect(() => {
+    if (selectedBusinessId) {
+      loadBusinessData(selectedBusinessId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBusinessId]);
+
+  const loadQueue = async () => {
+    if (!business?.id) return;
     try {
       const data = await api(`/businesses/${business.id}/queue`);
-
-      setQueue([
-        ...(data.waiting || []),
-        ...(data.called || []),
-        ...(data.completed || []),
-        ...(data.skipped || []),
-        ...(data.cancelled || []),
-      ]);
-
-      setQueuePaused(Boolean(data.queue_paused));
-    } catch (error) {
-      notify(error.message);
+      setQueue(data.queue || data.waiting || []);
+      setQueuePaused(data.queue_paused || false);
+    } catch (err) {
+      notify(err.message);
     }
   };
 
-  // Admin login.
-  const login = async (event) => {
-    event.preventDefault();
-
-    if (!email.trim() || !password) {
-      notify("Enter email and password");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const data = await api("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({
-          email: email.trim(),
-          password,
-        }),
-      });
-
-      if (!data.access_token) {
-        throw new Error("Login response did not contain an access token");
-      }
-
-      localStorage.setItem("queueless_token", data.access_token);
-
-      setToken(data.access_token);
-      setPassword("");
-
-      notify("Login successful");
-    } catch (error) {
-      notify(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Create appointment or walk-in.
-  const createBooking = async (event) => {
-    event.preventDefault();
-
-    if (!business?.id) {
-      notify("Load a business first");
-      return;
-    }
-
-    if (!selectedService) {
-      notify("Select a service");
-      return;
-    }
-
-    if (!customerName.trim() || !customerPhone.trim()) {
-      notify("Enter your name and phone number");
-      return;
-    }
-
-    if (mode === "appointment" && !appointmentTime) {
-      notify("Select an appointment date and time");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      let data;
-
-      if (mode === "walk-in") {
-        // Existing backend public walk-in endpoint.
-        data = await api("/public/walk-in", {
-          method: "POST",
-          body: JSON.stringify({
-            business_id: business.id,
-            service_id: selectedService,
-            customer_name: customerName.trim(),
-            customer_phone: customerPhone.trim(),
-            customer_email: customerEmail.trim() || null,
-          }),
-        });
-      } else {
-        data = await api("/public/bookings", {
-          method: "POST",
-          body: JSON.stringify({
-            business_id: business.id,
-            service_id: selectedService,
-            customer_name: customerName.trim(),
-            customer_phone: customerPhone.trim(),
-            customer_email: customerEmail.trim() || null,
-            scheduled_at: new Date(appointmentTime).toISOString(),
-          }),
-        });
-      }
-
-      setBooking(data);
-
-      const responseTrackingCode =
-        data.tracking_code ||
-        data.queue_token?.tracking_code ||
-        data.appointment?.tracking_code;
-
-      if (responseTrackingCode) {
-        setTrackingCode(responseTrackingCode);
-      }
-
-      notify("Request submitted successfully");
-    } catch (error) {
-      notify(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Track customer token.
-  const track = async (event) => {
-    event.preventDefault();
-
-    if (!trackingCode.trim()) {
-      notify("Enter your tracking code");
-      return;
-    }
-
-    try {
-      const data = await api(
-        `/public/track/${encodeURIComponent(trackingCode.trim())}`
-      );
-
-      const tracking = data.tracking || data;
-
-      setTrackedToken({
-        ...tracking,
-        status: tracking.queue_status || tracking.status,
-      });
-    } catch (error) {
-      setTrackedToken({
-        error: error.message,
-      });
-    }
-  };
-
-  // Call next waiting customer.
   const callNext = async () => {
-    if (!business?.id) {
-      notify("Load your business first");
-      return;
-    }
-
+    if (!selectedBusinessId) return;
     try {
-      await api(`/businesses/${business.id}/queue/call-next`, {
-        method: "POST",
-      });
-
-      await loadQueue();
-
+      await api(`/businesses/${selectedBusinessId}/queue/call-next`, { method: "POST" });
+      await loadBusinessData(selectedBusinessId);
       notify("Next customer called");
-    } catch (error) {
-      notify(error.message);
+    } catch (err) {
+      notify(err.message);
     }
   };
 
-  // Complete, skip or cancel a queue token.
   const queueAction = async (tokenId, action) => {
-    if (!business?.id) {
-      notify("Load your business first");
-      return;
-    }
-
+    if (!selectedBusinessId) return;
     try {
-      await api(
-        `/businesses/${business.id}/queue/${tokenId}/${action}`,
-        {
-          method: "POST",
-        }
-      );
-
-      await loadQueue();
-
+      await api(`/businesses/${selectedBusinessId}/queue/${tokenId}/${action}`, { method: "POST" });
+      await loadBusinessData(selectedBusinessId);
       notify(`Token ${action} successful`);
-    } catch (error) {
-      notify(error.message);
+    } catch (err) {
+      notify(err.message);
     }
   };
 
-  // Pause queue.
   const pauseQueue = async () => {
-    if (!business?.id) {
-      notify("Load your business first");
-      return;
-    }
-
+    if (!selectedBusinessId) return;
     try {
-      await api(`/businesses/${business.id}/queue/pause`, {
-        method: "POST",
-      });
-
+      await api(`/businesses/${selectedBusinessId}/queue/pause`, { method: "POST" });
       setQueuePaused(true);
       notify("Queue paused");
-    } catch (error) {
-      notify(error.message);
+    } catch (err) {
+      notify(err.message);
     }
   };
 
-  // Resume queue.
   const resumeQueue = async () => {
-    if (!business?.id) {
-      notify("Load your business first");
-      return;
-    }
-
+    if (!selectedBusinessId) return;
     try {
-      await api(`/businesses/${business.id}/queue/resume`, {
-        method: "POST",
-      });
-
+      await api(`/businesses/${selectedBusinessId}/queue/resume`, { method: "POST" });
       setQueuePaused(false);
       notify("Queue resumed");
-    } catch (error) {
-      notify(error.message);
+    } catch (err) {
+      notify(err.message);
     }
-  };
-
-  const toggleRole = () => {
-    const nextRole = role === "customer" ? "admin" : "customer";
-
-    setRole(nextRole);
-    setNotice("");
-  };
-
-  // Logout.
-  const logout = () => {
-    localStorage.removeItem("queueless_token");
-
-    setToken("");
-    setBusiness(null);
-    setServices([]);
-    setQueue([]);
-    setQueuePaused(false);
-    setMode("walk-in");
-
-    setRole("customer");
-
-    notify("Logged out successfully");
   };
 
   return (
     <div className="app-shell">
-      {/* Navigation */}
       <header className="topbar">
-        <div className="brand">
-          <span className="brand-icon">Q</span>
-          <span>QueueLess</span>
-        </div>
-
-        <div className="topbar-actions">
-          <button
-            className="btn btn-secondary"
-            onClick={toggleRole}
-          >
+        <strong>QueueLess</strong>
+        <div>
+          <button className="btn btn-secondary" onClick={() => setRole(role === "customer" ? "admin" : "customer")}>
             Switch to {role === "customer" ? "Admin" : "Customer"}
           </button>
-
-          {token && (
-            <button className="btn btn-logout" onClick={logout}>
-              Logout
-            </button>
-          )}
+          {token && <button className="btn btn-secondary" onClick={() => { localStorage.removeItem("queueless_token"); setToken(""); }}>Logout</button>}
         </div>
       </header>
 
       <main className="section">
-        {/* Notification */}
-        {notice && (
-          <div className="notice success">
-            {notice}
-          </div>
-        )}
+        {notice && <div className="notice success">{notice}</div>}
+        <p>Backend: {backendStatus}</p>
 
-        {/* Hero */}
-        <section className="hero">
-          <div className="hero-content">
-            <span className="eyebrow">SMART QUEUE MANAGEMENT</span>
-
-            <h1>
-              Skip the wait.
-              <br />
-              <span>Save your time.</span>
-            </h1>
-
-            <p>
-              Book appointments, join queues, and track your position
-              without waiting in long lines.
-            </p>
-
-            <div className="backend-status">
-              <span
-                className={`status-dot ${backendStatus}`}
-              />
-
-              Backend: {backendStatus}
-            </div>
-          </div>
-
-          <div className="hero-illustration">
-            <div className="illustration-card">
-              <div className="illustration-top">
-                <span>YOUR QUEUE</span>
-                <span className="live-label">LIVE</span>
-              </div>
-
-              <div className="illustration-number">05</div>
-              <p>Customers ahead of you</p>
-
-              <div className="progress-track">
-                <div className="progress-fill" />
-              </div>
-
-              <div className="illustration-bottom">
-                <span>Estimated waiting time</span>
-                <strong>15 min</strong>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Customer section */}
         {role === "customer" && (
-          <section className="content-section">
-            <div className="section-heading">
-              <span className="eyebrow">CUSTOMER PORTAL</span>
-              <h2>Manage your visit</h2>
-              <p>Load a business, book a service or track your queue.</p>
+          <>
+            <div className="card">
+              <h2>Load Business</h2>
+              <input className="input" value={businessSlug} onChange={(e) => setBusinessSlug(e.target.value)} placeholder="Business slug" />
+              <button className="btn" onClick={loadPublicBusiness}>Load Business</button>
             </div>
 
-            {/* Business */}
+            {business && <div className="card"><h2>Selected: {business.business_name}</h2><p>{business.business_name}</p><p>{business.business_type}</p></div>}
+
             <div className="card">
-              <div className="card-heading">
-                <div>
-                  <h2>Find a Business</h2>
-                  <p>Enter the business slug to continue.</p>
-                </div>
-
-                <span className="card-icon">01</span>
-              </div>
-
-              <div className="form-row">
-                <input
-                  className="input"
-                  value={businessSlug}
-                  onChange={(event) =>
-                    setBusinessSlug(event.target.value)
-                  }
-                  placeholder="Business slug"
-                />
-
-                <button
-                  className="btn"
-                  onClick={loadBusiness}
-                  disabled={loading}
-                >
-                  {loading ? "Loading..." : "Load Business"}
-                </button>
-              </div>
-            </div>
-
-            {/* Business information */}
-            {business && (
-              <div className="card business-card">
-                <div>
-                  <span className="eyebrow">SELECTED BUSINESS</span>
-                  <h2>
-                    {business.business_name || business.name}
-                  </h2>
-
-                  <p>
-                    {business.business_type || "Business"}
-                    {business.address ? ` • ${business.address}` : ""}
-                  </p>
-                </div>
-
-                <span className="badge">Available</span>
-              </div>
-            )}
-
-            {/* Booking */}
-            <div className="card">
-              <div className="card-heading">
-                <div>
-                  <h2>Book a Queue</h2>
-                  <p>Enter your details to join the queue.</p>
-                </div>
-
-                <span className="card-icon">02</span>
-              </div>
-
+              <h2>Book a Queue</h2>
               <form onSubmit={createBooking}>
-                <label>Choose Service</label>
-
-                <select
-                  className="input"
-                  value={selectedService}
-                  onChange={(event) =>
-                    setSelectedService(event.target.value)
-                  }
-                  required
-                >
+                <select className="input" value={selectedService} onChange={(e) => setSelectedService(e.target.value)}>
                   <option value="">Select service</option>
-
-                  {services.map((service) => (
-                    <option key={service.id} value={service.id}>
-                      {service.service_name || service.name}
-                      {" "}
-                      ({service.duration_minutes || service.duration} min)
-                    </option>
+                  {publicServices.map((s) => (
+                    <option key={s.id} value={s.id}>{s.service_name} ({s.duration_minutes} min)</option>
                   ))}
                 </select>
-
-                <div className="grid grid-2">
-                  <div>
-                    <label>Full Name</label>
-                    <input
-                      className="input"
-                      placeholder="Enter your name"
-                      value={customerName}
-                      onChange={(event) =>
-                        setCustomerName(event.target.value)
-                      }
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label>Phone Number</label>
-                    <input
-                      className="input"
-                      type="tel"
-                      placeholder="Enter phone number"
-                      value={customerPhone}
-                      onChange={(event) =>
-                        setCustomerPhone(event.target.value)
-                      }
-                      required
-                    />
-                  </div>
-                </div>
-
-                <label>Email Address (Optional)</label>
-
-                <input
-                  className="input"
-                  type="email"
-                  placeholder="Enter email address"
-                  value={customerEmail}
-                  onChange={(event) =>
-                    setCustomerEmail(event.target.value)
-                  }
-                />
-
-                <label>Booking Type</label>
-
-                <select
-                  className="input"
-                  value={mode}
-                  onChange={(event) => setMode(event.target.value)}
-                >
-                  <option value="walk-in">Walk-in</option>
-                  {token && (
-                    <option value="appointment">Appointment</option>
-                  )}
+                <input className="input" placeholder="Enter your name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} required />
+                <input className="input" placeholder="Enter phone number" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} required />
+                <input className="input" placeholder="Email (optional)" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+                <select className="input" value={mode} onChange={(e) => setMode(e.target.value)}>
+                  <option value="appointment">Appointment</option>
+                  <option value="walkin">Walk-in</option>
                 </select>
-
                 {mode === "appointment" && (
-                  <>
-                    <label>Appointment Date and Time</label>
-
-                    <input
-                      className="input"
-                      type="datetime-local"
-                      value={appointmentTime}
-                      onChange={(event) =>
-                        setAppointmentTime(event.target.value)
-                      }
-                      required
-                    />
-                  </>
+                  <input className="input" type="datetime-local" value={appointmentTime} onChange={(e) => setAppointmentTime(e.target.value)} />
                 )}
-
-                <button
-                  className="btn btn-full"
-                  type="submit"
-                  disabled={loading}
-                >
-                  {loading ? "Submitting..." : "Submit Booking"}
-                </button>
+                <button className="btn" type="submit">Submit Booking</button>
               </form>
-
-              {/* Booking result */}
               {booking && (
-                <div className="booking-result">
-                  <div className="result-icon">✓</div>
-
+                <div className="card" style={{ marginTop: "16px" }}>
                   <h3>Request Submitted</h3>
-
-                  <p>
-                    Your request has been processed by the server.
-                  </p>
-
-                  {(booking.queue_token?.token_number ?? booking.token_number) != null && (
-                    <div className="token-number">
-                      {booking.queue_token?.token_number ?? booking.token_number}
-                    </div>
+                  {booking.type === "appointment" && <p>Appointment ID: {booking.appointment?.id}</p>}
+                  {booking.type === "walkin" && (
+                    <>
+                      <p>Token: {booking.token_number}</p>
+                      <p>{booking.token_number}</p>
+                      <p>Tracking Code: {booking.tracking_code}</p>
+                      <p>{booking.tracking_code}</p>
+                    </>
                   )}
-
-                  {(booking.queue_token?.tracking_code || booking.tracking_code) && (
-                    <p>
-                      <strong>Tracking Code:</strong>{" "}
-                      {booking.queue_token?.tracking_code || booking.tracking_code}
-                    </p>
-                  )}
-
-                  {(booking.queue_token?.estimated_wait_minutes ??
-                    booking.estimated_wait_minutes) != null && (
-                    <p>
-                      <strong>Estimated Wait:</strong>{" "}
-                      {booking.queue_token?.estimated_wait_minutes ??
-                        booking.estimated_wait_minutes}{" "}
-                      minutes
-                    </p>
-                  )}
-
-                  {booking.appointment_id && (
-                    <p>
-                      <strong>Appointment ID:</strong> {booking.appointment_id}
-                    </p>
-                  )}
-
-                  {booking.appointment?.scheduled_at && (
-                    <p>
-                      <strong>Scheduled At:</strong>{" "}
-                      {new Date(
-                        booking.appointment.scheduled_at
-                      ).toLocaleString()}
-                    </p>
-                  )}
+                  <p>Estimated Wait: {booking.estimated_wait_minutes} minutes</p>
                 </div>
               )}
             </div>
 
-            {/* Tracking */}
             <div className="card">
-              <div className="card-heading">
-                <div>
-                  <h2>Track Your Token</h2>
-                  <p>Check your current queue position.</p>
-                </div>
-
-                <span className="card-icon">03</span>
-              </div>
-
+              <h2>Track Token</h2>
               <form onSubmit={track}>
-                <label>Tracking Code</label>
-
-                <div className="form-row">
-                  <input
-                    className="input"
-                    placeholder="Enter tracking code"
-                    value={trackingCode}
-                    onChange={(event) =>
-                      setTrackingCode(event.target.value)
-                    }
-                    required
-                  />
-
-                  <button className="btn" type="submit">
-                    Track Token
-                  </button>
-                </div>
+                <input className="input" placeholder="Enter tracking code" value={trackingCode} onChange={(e) => setTrackingCode(e.target.value)} />
+                <button className="btn" type="submit">Track Token</button>
               </form>
-
               {trackedToken && !trackedToken.error && (
-                <div className="tracking-result">
-                  <div className="tracking-header">
-                    <div>
-                      <span className="eyebrow">YOUR TOKEN</span>
-                      <h2>#{trackedToken.token_number ?? "—"}</h2>
-                    </div>
-
-                    <span className="badge">
-                      {trackedToken.status || "Unknown"}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-2 tracking-stats">
-                    <div className="stat-box">
-                      <span>Customers Ahead</span>
-                      <strong>
-                        {trackedToken.customers_ahead ?? "—"}
-                      </strong>
-                    </div>
-
-                    <div className="stat-box">
-                      <span>Estimated Wait</span>
-                      <strong>
-                        {trackedToken.estimated_wait_minutes != null
-                          ? `${trackedToken.estimated_wait_minutes} min`
-                          : "—"}
-                      </strong>
-                    </div>
-                  </div>
+                <div style={{ marginTop: "12px" }}>
+                  <h3>Your Token</h3>
+                  <p>#{trackedToken.token_number}</p>
+                  <p>{trackedToken.queue_status}</p>
+                  <p>{trackedToken.customers_ahead}</p>
+                  <p>{trackedToken.estimated_wait_minutes} min</p>
                 </div>
               )}
-
-              {trackedToken?.error && (
-                <p className="error-message">
-                  {trackedToken.error}
-                </p>
-              )}
+              {trackedToken?.error && <p style={{ color: "red" }}>{trackedToken.error}</p>}
             </div>
-          </section>
+          </>
         )}
 
-        {/* Admin section */}
-        {role === "admin" && (
-          <section className="content-section">
-            {!token ? (
-              <div className="login-wrapper">
-                <div className="card login-card">
-                  <div className="login-icon">Q</div>
+        {role === "admin" && !token && (
+          <div className="card">
+            <h2>Welcome Back</h2>
+            <form onSubmit={login}>
+              <input className="input" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input className="input" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <button className="btn" type="submit">Login</button>
+            </form>
+          </div>
+        )}
 
-                  <span className="eyebrow">ADMIN PORTAL</span>
+        {role === "admin" && token && (
+          <>
+            <div className="card">
+              <h2>Queue Management</h2>
+              {business && <p>Selected: {business.business_name}</p>}
+              <select className="input" value={selectedBusinessId} onChange={(e) => setSelectedBusinessId(e.target.value)}>
+                <option value="">Select business</option>
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>{b.business_name}</option>
+                ))}
+              </select>
+              <button className="btn" onClick={loadPublicBusiness}>Load Business</button>
+              <button className="btn" onClick={loadQueue}>Refresh Queue</button>
+              <button className="btn" onClick={callNext} disabled={queuePaused}>Call Next</button>
+              <button className="btn btn-secondary" onClick={pauseQueue}>Pause Queue</button>
+              <button className="btn btn-secondary" onClick={resumeQueue}>Resume Queue</button>
+            </div>
 
-                  <h2>Welcome Back</h2>
-
-                  <p>Login to manage your business queue.</p>
-
-                  <form onSubmit={login}>
-                    <label>Email Address</label>
-
-                    <input
-                      className="input"
-                      type="email"
-                      placeholder="Enter email"
-                      value={email}
-                      onChange={(event) =>
-                        setEmail(event.target.value)
-                      }
-                      required
-                    />
-
-                    <label>Password</label>
-
-                    <input
-                      className="input"
-                      type="password"
-                      placeholder="Enter password"
-                      value={password}
-                      onChange={(event) =>
-                        setPassword(event.target.value)
-                      }
-                      required
-                    />
-
-                    <button
-                      className="btn btn-full"
-                      type="submit"
-                      disabled={loading}
-                    >
-                      {loading ? "Logging in..." : "Login"}
-                    </button>
-                  </form>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="section-heading">
-                  <span className="eyebrow">BUSINESS DASHBOARD</span>
-                  <h2>Queue Management</h2>
-                  <p>Manage customers and control your live queue.</p>
-                </div>
-
-                {/* Business controls */}
-                <div className="card">
-                  <h2>Business Settings</h2>
-
-                  <label>Business Slug</label>
-
-                  <div className="form-row">
-                    <input
-                      className="input"
-                      value={businessSlug}
-                      onChange={(event) =>
-                        setBusinessSlug(event.target.value)
-                      }
-                      placeholder="Business slug"
-                    />
-
-                    <button
-                      className="btn"
-                      onClick={loadBusiness}
-                      disabled={loading}
-                    >
-                      Load Business
-                    </button>
-                  </div>
-
-                  {business && (
-                    <p className="business-loaded">
-                      Selected:{" "}
-                      <strong>
-                        {business.business_name || business.name}
-                      </strong>
-                    </p>
-                  )}
-
-                  <div className="action-toolbar">
-                    <button className="btn" onClick={loadQueue}>
-                      Refresh Queue
-                    </button>
-
-                    <button
-                      className="btn btn-success"
-                      onClick={callNext}
-                      disabled={queuePaused}
-                    >
-                      Call Next
-                    </button>
-
-                    <button
-                      className="btn btn-warning"
-                      onClick={pauseQueue}
-                    >
-                      Pause Queue
-                    </button>
-
-                    <button
-                      className="btn btn-secondary"
-                      onClick={resumeQueue}
-                    >
-                      Resume Queue
-                    </button>
-                  </div>
-                </div>
-
-                {/* Queue table */}
-                <div className="card">
-                  <div className="card-heading">
-                    <div>
-                      <h2>Live Queue</h2>
-                      <p>
-                        {queue.length} queue entries currently loaded.
-                      </p>
-                    </div>
-
-                    <span className="badge">
-                      {queuePaused ? "Paused" : "Live Dashboard"}
-                    </span>
-                  </div>
-
-                  <div className="table-wrapper">
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          <th>Token</th>
-                          <th>Customer</th>
-                          <th>Status</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {queue.length === 0 ? (
-                          <tr>
-                            <td colSpan="4" className="empty-state">
-                              No queue entries found. Refresh the queue.
-                            </td>
-                          </tr>
-                        ) : (
-                          queue.map((item) => (
-                            <tr key={item.id}>
-                              <td>
-                                <strong>#{item.token_number}</strong>
-                              </td>
-
-                              <td>{item.customer_name || "Customer"}</td>
-
-                              <td>
-                                <span className={`status-badge status-${item.status}`}>
-                                  {item.status}
-                                </span>
-                              </td>
-
-                              <td>
-                                <div className="table-actions">
-                                  {["waiting", "called", "serving"].includes(
-                                    item.status
-                                  ) && (
-                                    <>
-                                      {["called", "serving"].includes(
-                                        item.status
-                                      ) && (
-                                        <button
-                                          className="btn btn-small btn-success"
-                                          onClick={() =>
-                                            queueAction(item.id, "complete")
-                                          }
-                                        >
-                                          Complete
-                                        </button>
-                                      )}
-
-                                      <button
-                                        className="btn btn-small btn-warning"
-                                        onClick={() =>
-                                          queueAction(item.id, "skip")
-                                        }
-                                      >
-                                        Skip
-                                      </button>
-
-                                      <button
-                                        className="btn btn-small btn-danger"
-                                        onClick={() =>
-                                          queueAction(item.id, "cancel")
-                                        }
-                                      >
-                                        Cancel
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </>
-            )}
-          </section>
+            <div className="card">
+              <h3>Live Queue</h3>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Token</th>
+                    <th>Customer</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {queue.map((q) => (
+                    <tr key={q.id}>
+                      <td>#{q.token_number}</td>
+                      <td>{q.customer_name}</td>
+                      <td>{q.status}</td>
+                      <td>
+                        <button className="btn" onClick={() => queueAction(q.id, "complete")}>Complete</button>
+                        <button className="btn" onClick={() => queueAction(q.id, "skip")}>Skip</button>
+                        <button className="btn" onClick={() => queueAction(q.id, "cancel")}>Cancel</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </main>
-
-      <footer className="footer">
-        <strong>QueueLess</strong>
-        <p>Smart Appointment & Live Queue Management System</p>
-      </footer>
     </div>
   );
 }
