@@ -630,3 +630,14 @@
 .sidebar-nav span { padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.05); }
 .admin-main { display: flex; flex-direction: column; gap: 16px; }
 @media (max-width: 768px) { .admin-layout { grid-template-columns: 1fr; } }
+
+/* Modern QueueLess redesign layer */
+.app-shell { background: #f8fafc; }
+.topbar { box-shadow: 0 4px 20px rgba(15,23,42,0.08); }
+.card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(15,23,42,0.1); }
+.btn { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.btn:hover { transform: translateY(-1px); }
+.admin-sidebar { box-shadow: 0 8px 24px rgba(15,23,42,0.15); }
+.progress-bar { height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin: 12px 0; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #7c3aed, #a78bfa); border-radius: 999px; }

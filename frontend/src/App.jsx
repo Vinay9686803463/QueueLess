@@ -257,6 +257,7 @@ export default function App() {
             {business && <div className="card"><h2>Selected: {business.business_name}</h2><p>{business.business_name}</p><p>{business.business_type}</p></div>}
 
             <div className="card">
+              <div className="progress-bar"><div className="progress-fill" style={{ width: booking ? "100%" : "35%" }}></div></div>
               <h2>Book a Queue</h2>
               <form onSubmit={createBooking}>
                 <select className="input" value={selectedService} onChange={(e) => setSelectedService(e.target.value)}>
