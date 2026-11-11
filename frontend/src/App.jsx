@@ -327,6 +327,18 @@ export default function App() {
 
         {role === "admin" && token && (
           <>
+            <div className="admin-layout">
+              <aside className="admin-sidebar">
+                <div className="sidebar-brand">QueueLess</div>
+                <nav className="sidebar-nav">
+                  <span>Dashboard</span>
+                  <span>Queues</span>
+                  <span>Appointments</span>
+                  <span>Services</span>
+                  <span>Settings</span>
+                </nav>
+              </aside>
+              <div className="admin-main">
             <div className="card">
               <h2>Queue Management</h2>
               {business && <p>Selected: {business.business_name}</p>}
@@ -369,6 +381,8 @@ export default function App() {
                   ))}
                 </tbody>
               </table>
+            </div>
+              </div>
             </div>
           </>
         )}
