@@ -1624,7 +1624,12 @@ select {
     gap: 0;
   }
 
+  .checkin-panel-head {
+    align-items: center;
+  }
+
   .checkin-panel-head h2 {
+    margin: 6px 0 4px;
     font-size: 21px;
   }
 
