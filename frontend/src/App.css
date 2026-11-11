@@ -272,7 +272,7 @@ select {
 
 .checkin-layout {
   display: grid;
-  grid-template-columns: .82fr 1.18fr;
+  grid-template-columns: 0.82fr 1.18fr;
   align-items: stretch;
   overflow: hidden;
   border: 1px solid #eee7f5;
