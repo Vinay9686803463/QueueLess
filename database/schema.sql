@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS appointments (
     customer_name VARCHAR(120) NOT NULL,
     customer_phone VARCHAR(20) NOT NULL,
     customer_email VARCHAR(255),
+    customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
 
     scheduled_at TIMESTAMPTZ NOT NULL,
 
@@ -211,6 +212,7 @@ CREATE TABLE IF NOT EXISTS queue_tokens (
 
     customer_name VARCHAR(120) NOT NULL,
     customer_phone VARCHAR(20) NOT NULL,
+    customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
 
     token_number INTEGER NOT NULL
         CHECK (token_number > 0),
