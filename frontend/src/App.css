@@ -2057,3 +2057,15 @@ select {
     height: 30px;
   }
 }
+
+/* Reference redesign color overrides */
+:root {
+  --brand-blue: #007BFF;
+  --brand-teal: #17A2B8;
+}
+
+.topbar, .navbar { background: linear-gradient(135deg, #0f766e, #17A2B8); }
+.btn, .button-primary { background: #007BFF; }
+.btn:hover, .button-primary:hover { background: #0069d9; }
+.stat, .ticket-number, .illustration-number { color: #007BFF; }
+.live-label { background: #d1fae5; color: #065f46; }
