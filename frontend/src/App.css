@@ -1814,3 +1814,246 @@ select {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+
+/* =========================================
+   QUEUELESS CUSTOMER CHECK-IN UI FIX
+========================================= */
+
+/* LEFT PURPLE PANEL */
+.checkin-aside {
+  min-width: 0;
+  padding: 48px 42px 38px;
+}
+
+.step-list {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-top: 32px;
+}
+
+.step-item {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.step-item > span {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #ffffff80;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.step-item > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 5px;
+}
+
+.step-item strong {
+  display: block;
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.step-item small {
+  display: block;
+  color: #eee7f8;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* RIGHT WHITE FORM PANEL */
+.checkin-card {
+  min-width: 0;
+  padding: 39px clamp(25px, 4vw, 53px) 34px;
+  background: #ffffff !important;
+  color: #25333b !important;
+  border-radius: 0 24px 24px 0;
+  box-shadow: none;
+}
+
+.checkin-card * {
+  box-sizing: border-box;
+}
+
+.checkin-card-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.checkin-card-heading h2 {
+  color: #25333b !important;
+  font-size: 25px;
+  margin: 8px 0 6px;
+}
+
+.checkin-card-heading p {
+  color: #879197 !important;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* BUSINESS CODE BOX */
+.checkin-card .business-loader {
+  padding: 18px;
+  margin-bottom: 22px;
+  background: #f7f5fa !important;
+  border: 1px solid #eee8f5;
+  border-radius: 13px;
+}
+
+.checkin-card label {
+  display: block;
+  margin-bottom: 8px;
+  color: #4b555d !important;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.checkin-card .business-loader-row {
+  display: flex;
+  gap: 10px;
+}
+
+.checkin-card .business-loader-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.checkin-card input,
+.checkin-card select {
+  width: 100%;
+  min-height: 45px;
+  padding: 11px 14px;
+  color: #34434b !important;
+  background: #ffffff !important;
+  border: 1px solid #dedee4 !important;
+  border-radius: 9px;
+}
+
+.checkin-card input::placeholder {
+  color: #9aa2a7;
+}
+
+.checkin-card input:focus,
+.checkin-card select:focus {
+  outline: none;
+  border-color: #9670ce !important;
+  box-shadow: 0 0 0 3px #9670ce20;
+}
+
+/* FORM FIELDS */
+.checkin-card .checkin-form {
+  padding-top: 0;
+}
+
+.checkin-card .field {
+  min-width: 0;
+  margin-bottom: 17px;
+}
+
+.checkin-card .field-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+.checkin-card .field-row .field {
+  margin-bottom: 17px;
+}
+
+/* BUTTON */
+.checkin-card button.btn-purple,
+.checkin-card .submit-checkin {
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #9873d0, #7952bb) !important;
+  border: 0;
+  border-radius: 9px;
+}
+
+.checkin-card .submit-checkin {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 8px;
+}
+
+/* TRACKING SECTION */
+.track-section {
+  background: #ffffff !important;
+  color: #25333b !important;
+  border: 1px solid #e8e3ef;
+  border-radius: 17px;
+  box-shadow: 0 10px 30px rgba(50, 35, 75, .05);
+}
+
+.track-section h2 {
+  color: #25333b !important;
+}
+
+.track-section .input {
+  color: #34434b !important;
+  background: #ffffff !important;
+}
+
+.tracking-result {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.tracking-result div {
+  min-width: 0;
+  background: #f8f5fc;
+}
+
+/* RESPONSIVE */
+@media (max-width: 760px) {
+  .checkin-aside {
+    padding: 30px 25px;
+  }
+
+  .step-list {
+    gap: 15px;
+    margin-top: 23px;
+  }
+
+  .checkin-card {
+    padding: 28px 23px;
+    border-radius: 0 0 18px 18px;
+  }
+
+  .track-section {
+    grid-template-columns: 1fr;
+  }
+
+  .tracking-result {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .step-item {
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .step-item > span {
+    width: 30px;
+    height: 30px;
+  }
+}
