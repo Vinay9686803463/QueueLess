@@ -59,6 +59,11 @@ export default function App() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showRegister, setShowRegister] = useState(false);
+  const [regName, setRegName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regConfirm, setRegConfirm] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -731,6 +736,29 @@ export default function App() {
             <button className="btn btn-admin-login" type="submit">
               Sign in to dashboard <span>→</span>
             </button>
+
+            <div style={{ marginTop: "12px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
+              <button type="button" className="btn btn-secondary" onClick={async () => {
+                const email = prompt("Enter your registered email:");
+                if (!email) return;
+                try {
+                  const data = await api("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
+                  if (data.reset_token) {
+                    const newPassword = prompt("Dev reset token received. Enter new password:");
+                    if (newPassword) {
+                      await api("/auth/reset-password", { method: "POST", body: JSON.stringify({ token: data.reset_token, password: newPassword }) });
+                      alert("Password reset successful.");
+                    }
+                  } else {
+                    alert("If the email exists, a reset link has been sent.");
+                  }
+                } catch (err) {
+                  alert(err.message);
+                }
+              }}>
+                Forgot password
+              </button>
+            </div>
 
             <small className="login-footnote">
               Secure access for QueueLess business administrators.
