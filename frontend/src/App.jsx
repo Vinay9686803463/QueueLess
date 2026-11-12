@@ -433,6 +433,14 @@ export default function App() {
               <span className="trust-separator">•</span>
               Live queue tracking
             </div>
+
+            <div className="card">
+              <h2>Customer Account</h2>
+              <input className="input" placeholder="Full name" />
+              <input className="input" placeholder="Email" />
+              <input className="input" type="password" placeholder="Password" />
+              <button className="btn btn-purple">Register / Login</button>
+            </div>
           </div>
 
           <section className="checkin-layout">
