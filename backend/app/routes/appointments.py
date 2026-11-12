@@ -29,6 +29,7 @@ APPOINTMENT_FIELDS = {
     "customer_name",
     "customer_phone",
     "customer_email",
+    "customer_id",
     "notes",
     "status",
 }
@@ -50,6 +51,7 @@ def get_appointment_columns():
         customer_name,
         customer_phone,
         customer_email,
+        customer_id::text AS customer_id,
         scheduled_at,
         status,
         notes,
@@ -338,6 +340,7 @@ def create_appointment():
                     customer_name,
                     customer_phone,
                     customer_email,
+                    customer_id,
                     scheduled_at,
                     status,
                     notes
@@ -348,6 +351,7 @@ def create_appointment():
                     :customer_name,
                     :customer_phone,
                     :customer_email,
+                    :customer_id,
                     :scheduled_at,
                     'booked',
                     :notes
@@ -365,6 +369,7 @@ def create_appointment():
                     and data["customer_email"].strip()
                     else None
                 ),
+                "customer_id": data.get("customer_id") if _is_uuid(data.get("customer_id")) else None,
                 "scheduled_at": scheduled_at,
                 "notes": (
                     data["notes"].strip()
