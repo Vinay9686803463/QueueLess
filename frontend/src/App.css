@@ -1678,3 +1678,139 @@ select {
     padding: 15px;
   }
 }
+
+
+/* =========================================
+   QUEUELESS CUSTOMER FORM - CLASS FIX
+========================================= */
+
+.checkin-card {
+  min-width: 0;
+  padding: 39px clamp(25px, 4vw, 53px) 34px;
+  background: #ffffff !important;
+  color: #172b35;
+  border: 0;
+  border-radius: 0 24px 24px 0;
+  box-shadow: none;
+}
+
+.checkin-card,
+.checkin-card * {
+  box-sizing: border-box;
+}
+
+.checkin-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 22px;
+  color: #25333b;
+}
+
+.checkin-card-heading h2 {
+  margin: 8px 0 6px;
+  color: #25333b;
+  font-size: 25px;
+  letter-spacing: -.7px;
+}
+
+.checkin-card-heading p {
+  margin: 0;
+  color: #879197;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.checkin-card label {
+  color: #4b555d;
+}
+
+.checkin-card .input,
+.checkin-card input,
+.checkin-card select {
+  color: #34434b;
+  background: #ffffff !important;
+}
+
+.checkin-card .checkin-form {
+  padding-top: 24px;
+}
+
+.checkin-card .field {
+  margin-bottom: 15px;
+}
+
+.checkin-card .field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.checkin-card .submit-checkin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-top: 12px;
+  padding: 14px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #9873d0, #7952bb);
+  border: 0;
+  border-radius: 9px;
+}
+
+.checkin-card .privacy-note {
+  text-align: center;
+  color: #929ba1;
+}
+
+.track-section {
+  background: #ffffff !important;
+  color: #172b35;
+  border: 1px solid #e8e3ef;
+  border-radius: 17px;
+  box-shadow: 0 10px 30px rgba(50, 35, 75, .05);
+}
+
+.track-section h2 {
+  color: #25333b;
+}
+
+.track-section .input {
+  background: #ffffff !important;
+  color: #34434b;
+}
+
+.tracking-result {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.tracking-result div {
+  min-width: 0;
+  background: #f8f5fc;
+}
+
+/* Responsive customer form */
+
+@media (max-width: 760px) {
+  .checkin-card {
+    padding: 28px 23px;
+    border-radius: 0 0 18px 18px;
+  }
+
+  .track-section {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .checkin-card .field-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .tracking-result {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
