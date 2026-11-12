@@ -2069,3 +2069,11 @@ select {
 .btn:hover, .button-primary:hover { background: #0069d9; }
 .stat, .ticket-number, .illustration-number { color: #007BFF; }
 .live-label { background: #d1fae5; color: #065f46; }
+
+/* Login redesign */
+.login-page { background: linear-gradient(135deg, #0f172a, #1e3a8a); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.login-card { background: #111827; border: 1px solid #1f2937; border-radius: 16px; padding: 32px; width: 100%; max-width: 420px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+.login-card h1 { color: #ffffff; }
+.login-card label { color: #cbd5e1; font-size: 14px; }
+.login-card .input { background: #0f172a; color: #ffffff; border: 1px solid #334155; }
+.btn-admin-login { background: linear-gradient(135deg, #007BFF, #17A2B8); border: none; }

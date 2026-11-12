@@ -59,6 +59,7 @@ export default function App() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
@@ -173,6 +174,26 @@ export default function App() {
       localStorage.setItem("queueless_token", data.access_token);
       setToken(data.access_token);
       notify("Login successful");
+    } catch (err) {
+      notify(err.message);
+    }
+  };
+
+  const register = async (e) => {
+    e.preventDefault();
+    if (regPassword !== regConfirm) {
+      notify("Passwords do not match");
+      return;
+    }
+    try {
+      const data = await api("/auth/register", {
+        method: "POST",
+        body: JSON.stringify({ full_name: regName, email: regEmail, password: regPassword }),
+      });
+      localStorage.setItem("queueless_token", data.access_token);
+      setToken(data.access_token);
+      notify("Registration successful");
+      setShowRegister(false);
     } catch (err) {
       notify(err.message);
     }
@@ -723,19 +744,45 @@ export default function App() {
             />
 
             <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              className="input"
-              type="password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+            <div style={{ position: "relative" }}>
+              <input
+                id="password"
+                className="input"
+                type={showPassword ? "text" : "password"}
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                style={{ position: "absolute", right: "10px", top: "10px", border: "none", background: "transparent", cursor: "pointer" }}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
 
             <button className="btn btn-admin-login" type="submit">
               Sign in to dashboard <span>→</span>
             </button>
+
+            <div style={{ marginTop: "12px" }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowRegister((v) => !v)}>
+                {showRegister ? "Back to login" : "Create account"}
+              </button>
+            </div>
+
+            {showRegister && (
+              <form onSubmit={register} style={{ marginTop: "16px" }}>
+                <input className="input" placeholder="Full name" value={regName} onChange={(e) => setRegName(e.target.value)} required />
+                <input className="input" type="email" placeholder="Email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} required />
+                <input className="input" type="password" placeholder="Password" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} required />
+                <input className="input" type="password" placeholder="Confirm password" value={regConfirm} onChange={(e) => setRegConfirm(e.target.value)} required />
+                <button className="btn" type="submit">Register</button>
+              </form>
+            )}
 
             <div style={{ marginTop: "12px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
               <button type="button" className="btn btn-secondary" onClick={async () => {
