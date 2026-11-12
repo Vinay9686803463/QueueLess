@@ -9,6 +9,7 @@ from .routes.business import business_bp, public_business_bp
 from .routes.appointments import appointment_bp
 from .routes.queue import queue_bp
 from .routes.services import service_bp
+from .routes.customer_auth import customer_auth_bp
 from .routes.public import public_bp
 
 
@@ -24,6 +25,7 @@ def create_app():
     app.register_blueprint(appointment_bp)
     app.register_blueprint(queue_bp)
     app.register_blueprint(service_bp)
+    app.register_blueprint(customer_auth_bp)
     app.register_blueprint(public_bp)
 
     CORS(app, resources={
