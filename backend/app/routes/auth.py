@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -277,6 +278,98 @@ def login():
             "status": "error",
             "message": "Login failed. Please try again."
         }), 500
+
+
+@auth_bp.route("/forgot-password", methods=["POST"])
+def forgot_password():
+    data = request.get_json(silent=True) or {}
+    email = str(data.get("email", "")).strip().lower()
+
+    # Always return success to avoid email enumeration.
+    response = {"status": "success", "message": "If the email exists, a reset link has been sent."}
+
+    if not email:
+        return jsonify(response), 200
+
+    try:
+        user = db.session.execute(
+            text("SELECT id FROM users WHERE email = :email"),
+            {"email": email},
+        ).mappings().first()
+
+        if user:
+            import secrets, hashlib
+            from datetime import timedelta
+            raw_token = secrets.token_urlsafe(32)
+            token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+            expires = datetime.now(timezone.utc) + timedelta(hours=1)
+
+            db.session.execute(
+                text("""
+                    INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+                    VALUES (:user_id, :token_hash, :expires_at)
+                """),
+                {"user_id": user["id"], "token_hash": token_hash, "expires_at": expires},
+            )
+            db.session.commit()
+
+            # Development-only: return token if email is not configured.
+            if os.getenv("FLASK_ENV", "development").lower() != "production":
+                response["reset_token"] = raw_token
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Forgot password failed")
+
+    return jsonify(response), 200
+
+
+@auth_bp.route("/reset-password", methods=["POST"])
+def reset_password():
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "")
+    new_password = data.get("password", "")
+
+    if not token or not new_password:
+        return jsonify({"status": "error", "message": "Token and new password are required."}), 400
+
+    if len(new_password) < 8:
+        return jsonify({"status": "error", "message": "Password must be at least 8 characters."}), 400
+
+    import hashlib
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    try:
+        row = db.session.execute(
+            text("""
+                SELECT id, user_id, expires_at, used_at
+                FROM password_reset_tokens
+                WHERE token_hash = :token_hash
+            """),
+            {"token_hash": token_hash},
+        ).mappings().first()
+
+        if not row or row["used_at"] is not None:
+            return jsonify({"status": "error", "message": "Invalid or expired reset token."}), 400
+
+        if row["expires_at"] < datetime.now(timezone.utc):
+            return jsonify({"status": "error", "message": "Reset token has expired."}), 400
+
+        new_hash = generate_password_hash(new_password)
+        db.session.execute(
+            text("UPDATE users SET password_hash = :h WHERE id = :id"),
+            {"h": new_hash, "id": row["user_id"]},
+        )
+        db.session.execute(
+            text("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = :id"),
+            {"id": row["id"]},
+        )
+        db.session.commit()
+
+        return jsonify({"status": "success", "message": "Password reset successful."}), 200
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Reset password failed")
+        return jsonify({"status": "error", "message": "Password reset failed."}), 500
 
 
 @auth_bp.route("/me", methods=["GET"])

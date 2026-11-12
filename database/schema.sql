@@ -187,6 +187,16 @@ CREATE TABLE IF NOT EXISTS queue_daily_counters (
 -- Walk-in and appointment queue entries
 -- ==========================================
 
+CREATE TABLE IF NOT EXISTS customers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    full_name VARCHAR(120) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    phone VARCHAR(20),
+    password_hash TEXT NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS queue_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
@@ -241,6 +251,16 @@ ON queue_tokens(business_id, queue_date, status);
 
 CREATE INDEX IF NOT EXISTS idx_queue_tracking
 ON queue_tokens(tracking_code);
+
+-- Password reset tokens
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 -- ==========================================
 -- 8. UPDATED_AT TRIGGER
