@@ -6,6 +6,7 @@ from sqlalchemy import text
 
 from ..extensions import db
 from .auth import token_required
+from .customer_auth import decode_customer_token
 
 
 appointment_bp = Blueprint(
@@ -245,6 +246,13 @@ def create_appointment():
     business_id = data.get("business_id")
     service_id = data.get("service_id")
 
+    # Derive customer identity from the verified customer token, never
+    # trust a client-supplied customer_id.
+    customer_id = None
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        customer_id = decode_customer_token(auth_header.split(" ", 1)[1].strip())
+
     if not _is_uuid(business_id):
         return jsonify({"status": "error", "message": "Invalid business ID"}), 400
 
@@ -369,7 +377,7 @@ def create_appointment():
                     and data["customer_email"].strip()
                     else None
                 ),
-                "customer_id": data.get("customer_id") if _is_uuid(data.get("customer_id")) else None,
+                "customer_id": customer_id,
                 "scheduled_at": scheduled_at,
                 "notes": (
                     data["notes"].strip()

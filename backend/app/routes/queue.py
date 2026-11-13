@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from ..extensions import db
 from ..utils.rate_limit import rate_limiter
 from .auth import token_required
+from .customer_auth import decode_customer_token
 from .appointments import accessible_business_ids
 
 
@@ -293,6 +294,12 @@ def walk_in():
     customer_name = data.get("customer_name")
     customer_phone = data.get("customer_phone")
 
+    # Derive customer identity from the verified customer token.
+    customer_id = None
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        customer_id = decode_customer_token(auth_header.split(" ", 1)[1].strip())
+
     if not _is_uuid(business_id):
         return jsonify({"status": "error", "message": "Invalid business ID"}), 400
 
@@ -386,7 +393,7 @@ def walk_in():
                         "service_id": service_id,
                         "customer_name": customer_name.strip(),
                         "customer_phone": customer_phone.strip(),
-                        "customer_id": data.get("customer_id") if _is_uuid(data.get("customer_id")) else None,
+                        "customer_id": customer_id,
                         "token_number": token_number,
                         "queue_date": today,
                         "tracking_code": tracking_code,
