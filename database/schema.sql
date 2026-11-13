@@ -146,7 +146,6 @@ CREATE TABLE IF NOT EXISTS appointments (
     customer_phone VARCHAR(20) NOT NULL,
     customer_email VARCHAR(255),
     customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
-    customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
 
     scheduled_at TIMESTAMPTZ NOT NULL,
 
@@ -167,6 +166,9 @@ CREATE TABLE IF NOT EXISTS appointments (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE appointments
+ADD COLUMN IF NOT EXISTS customer_id UUID REFERENCES customers(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_appointments_business
 ON appointments(business_id);
@@ -198,16 +200,6 @@ CREATE TABLE IF NOT EXISTS queue_daily_counters (
 -- 7. QUEUE TOKENS
 -- Walk-in and appointment queue entries
 -- ==========================================
-
-CREATE TABLE IF NOT EXISTS customers (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    full_name VARCHAR(120) NOT NULL,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    phone VARCHAR(20),
-    password_hash TEXT NOT NULL,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
 
 CREATE TABLE IF NOT EXISTS queue_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -255,6 +247,9 @@ CREATE TABLE IF NOT EXISTS queue_tokens (
 
     UNIQUE (business_id, queue_date, token_number)
 );
+
+ALTER TABLE queue_tokens
+ADD COLUMN IF NOT EXISTS customer_id UUID REFERENCES customers(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_queue_business_date
 ON queue_tokens(business_id, queue_date);

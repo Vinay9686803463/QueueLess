@@ -21,6 +21,12 @@ async function api(path, options = {}) {
       "Content-Type": "application/json",
       ...(options.headers || {}),
       ...authHeaders(),
+      ...(customerToken &&
+      (path.startsWith("/customer-auth/") ||
+        path.startsWith("/public/bookings") ||
+        path.startsWith("/public/walk-in"))
+        ? { Authorization: `Bearer ${customerToken}` }
+        : {}),
     },
   });
   const data = await response.json().catch(() => ({}));
@@ -218,10 +224,10 @@ export default function App() {
       setCustomerToken(data.access_token);
       notify("Customer login successful");
       try {
-        const appts = await api("/customer-auth/appointments");
-        setCustomerAppointments(appts.appointments || []);
-        const toks = await api("/customer-auth/queue-tokens");
-        setCustomerTokens(toks.tokens || []);
+        const appointments = await api("/customer-auth/appointments");
+        setCustomerAppointments(appointments.appointments || []);
+        const queueTokens = await api("/customer-auth/queue-tokens");
+        setCustomerTokens(queueTokens.tokens || []);
       } catch (err) {
         notify(err.message);
       }

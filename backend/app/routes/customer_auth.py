@@ -1,4 +1,3 @@
-import os
 import jwt
 from datetime import datetime, timedelta, timezone
 from flask import Blueprint, request, jsonify, g, current_app
@@ -10,7 +9,7 @@ from ..extensions import db
 customer_auth_bp = Blueprint("customer_auth", __name__, url_prefix="/api/customer-auth")
 
 def _jwt_secret():
-    return os.getenv("JWT_SECRET_KEY") or os.getenv("SECRET_KEY")
+    return current_app.config["JWT_SECRET_KEY"]
 
 def create_customer_token(customer_id):
     now = datetime.now(timezone.utc)
@@ -47,16 +46,36 @@ def customer_token_required(func):
 
 @customer_auth_bp.route("/register", methods=["POST"])
 def register():
-    data = request.get_json(silent=True) or {}
-    full_name = str(data.get("full_name", "")).strip()
-    email = str(data.get("email", "")).strip().lower()
-    phone = str(data.get("phone", "")).strip()
-    password = data.get("password", "")
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"status": "error", "message": "A valid JSON object is required."}), 400
 
-    if not full_name or not email or not password:
+    full_name = data.get("full_name")
+    email = data.get("email")
+    phone = data.get("phone", "")
+    password = data.get("password")
+
+    if not isinstance(full_name, str) or not full_name.strip():
+        return jsonify({"status": "error", "message": "Full name is required."}), 400
+    if not isinstance(email, str) or not email.strip():
+        return jsonify({"status": "error", "message": "Email is required."}), 400
+    if not isinstance(password, str) or not password:
         return jsonify({"status": "error", "message": "Full name, email and password are required."}), 400
+    if not isinstance(phone, str):
+        return jsonify({"status": "error", "message": "Phone must be text."}), 400
+
+    full_name = full_name.strip()
+    email = email.strip().lower()
+    phone = phone.strip()
+
+    if len(full_name) > 120 or len(email) > 255 or len(phone) > 20:
+        return jsonify({"status": "error", "message": "One or more fields exceed the allowed length."}), 400
+    if "@" not in email or email.startswith("@") or email.endswith("@"):
+        return jsonify({"status": "error", "message": "Enter a valid email address."}), 400
     if len(password) < 8:
         return jsonify({"status": "error", "message": "Password must be at least 8 characters."}), 400
+    if len(password) > 128:
+        return jsonify({"status": "error", "message": "Password is too long."}), 400
 
     try:
         result = db.session.execute(
@@ -80,11 +99,15 @@ def register():
 
 @customer_auth_bp.route("/login", methods=["POST"])
 def login():
-    data = request.get_json(silent=True) or {}
-    email = str(data.get("email", "")).strip().lower()
-    password = data.get("password", "")
-    if not email or not password:
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"status": "error", "message": "A valid JSON object is required."}), 400
+
+    email = data.get("email")
+    password = data.get("password")
+    if not isinstance(email, str) or not email.strip() or not isinstance(password, str) or not password:
         return jsonify({"status": "error", "message": "Email and password are required."}), 400
+    email = email.strip().lower()
     try:
         user = db.session.execute(
             text("SELECT id::text AS id, full_name, email, phone, password_hash, is_active FROM customers WHERE email = :email"),
