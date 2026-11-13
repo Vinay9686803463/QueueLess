@@ -454,59 +454,122 @@ export default function App() {
 
       {role === "customer" && (
         <main className="customer-page">
-          <div className="customer-intro">
-            <span className="eyebrow purple-eyebrow">
-              A BETTER WAY TO WAIT
-            </span>
-
-            <h1>
-              Your time matters.
-              <br />
-              <span>Skip the waiting room.</span>
-            </h1>
-
-            <p>
-              Check in for your appointment or join the queue
-              in just a few simple steps.
-            </p>
-
-            <div className="customer-trust">
-              <span className="trust-check">✓</span>
-              Simple check-in
-              <span className="trust-separator">•</span>
-              Live queue tracking
+          <section className="customer-hero-layout">
+            <div className="customer-hero-art">
+              <div className="customer-hero-orbit" />
+              <div className="customer-hero-copy">
+                <span className="eyebrow">A BETTER WAY TO WAIT</span>
+                <h1>
+                  Your time matters.
+                  <br />
+                  <span>Skip the waiting room.</span>
+                </h1>
+                <p>
+                  Check in for your appointment or join the queue in just a
+                  few simple steps.
+                </p>
+                <div className="customer-trust">
+                  <span className="trust-check">✓</span>
+                  Simple check-in
+                  <span className="trust-separator">•</span>
+                  Live queue tracking
+                </div>
+                <div className="customer-hero-bars" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                </div>
+              </div>
             </div>
 
-            <div className="card">
-              <h2>Customer Account</h2>
-              <input className="input" placeholder="Full name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
-              <input className="input" placeholder="Email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
-              <input className="input" type="password" placeholder="Password" value={customerPassword} onChange={(e) => setCustomerPassword(e.target.value)} />
-              <button className="btn" onClick={customerRegister}>Register</button>
-              <button className="btn btn-secondary" onClick={customerLogin}>Login</button>
-              {customerToken && (
+            <div className="customer-account-panel">
+              <span className="eyebrow purple-eyebrow">CUSTOMER ACCOUNT</span>
+              <h2>Welcome</h2>
+              <p className="customer-account-description">
+                Sign in or create an account to keep track of your visits.
+              </p>
+              <section className="customer-account" aria-labelledby="customer-account-title">
+                <h3 id="customer-account-title">Customer Account</h3>
+              {!customerToken ? (
                 <>
-                  <p>Customer logged in.</p>
-                  <h3>My Appointments</h3>
-                  {customerAppointments.map((a) => (
-                    <p key={a.id}>{a.service_name} - {a.status} - {a.scheduled_at}</p>
-                  ))}
-                  <h3>My Tokens</h3>
-                  {customerTokens.map((t) => (
-                    <p key={t.id}>{t.token_number} - {t.status} - ahead: {t.ahead}</p>
-                  ))}
+                  <input
+                    className="input"
+                    autoComplete="name"
+                    placeholder="Full name"
+                    aria-label="Full name"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                  />
+                  <input
+                    className="input"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="Email"
+                    aria-label="Email"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                  />
+                  <input
+                    className="input"
+                    type="password"
+                    autoComplete="current-password"
+                    placeholder="Password"
+                    aria-label="Password"
+                    value={customerPassword}
+                    onChange={(e) => setCustomerPassword(e.target.value)}
+                  />
+                  <div className="customer-account-actions">
+                    <button className="btn btn-account" type="button" onClick={customerRegister}>
+                      Register
+                    </button>
+                    <button className="btn btn-account" type="button" onClick={customerLogin}>
+                      Login
+                    </button>
+                  </div>
                 </>
+              ) : (
+                <div className="customer-account-summary">
+                  <p>You’re signed in. Your appointments and queue tokens are below.</p>
+                  <button
+                    className="btn btn-account"
+                    type="button"
+                    onClick={() => {
+                      localStorage.removeItem("queueless_customer_token");
+                      setCustomerToken("");
+                      setCustomerAppointments([]);
+                      setCustomerTokens([]);
+                      notify("You have been logged out");
+                    }}
+                  >
+                    Log out
+                  </button>
+                  <div className="customer-account-records">
+                    <div>
+                      <h3>My appointments</h3>
+                      {customerAppointments.length ? customerAppointments.map((appointment) => (
+                        <p key={appointment.id}>
+                          {appointment.service_name || "Appointment"} · {appointment.status} ·{" "}
+                          {appointment.scheduled_at}
+                        </p>
+                      )) : <p>No appointments yet.</p>}
+                    </div>
+                    <div>
+                      <h3>My queue tokens</h3>
+                      {customerTokens.length ? customerTokens.map((queueToken) => (
+                        <p key={queueToken.id}>
+                          Token #{queueToken.token_number} · {queueToken.status} ·{" "}
+                          {queueToken.ahead} ahead
+                        </p>
+                      )) : <p>No queue tokens yet.</p>}
+                    </div>
+                  </div>
+                </div>
               )}
+              </section>
             </div>
-
-            <div className="card">
-              <h2>Customer Account</h2>
-              <input className="input" placeholder="Full name" />
-              <input className="input" placeholder="Email" />
-              <input className="input" type="password" placeholder="Password" />
-              <button className="btn btn-purple">Register / Login</button>
-            </div>
-          </div>
+          </section>
 
           <section className="checkin-layout">
             <div className="checkin-aside">
