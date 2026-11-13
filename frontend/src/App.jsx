@@ -10,6 +10,11 @@ function authHeaders() {
 }
 
 async function api(path, options = {}) {
+  const customerToken = localStorage.getItem("queueless_customer_token");
+  // merge customer token if present and no admin token
+  if (customerToken && !localStorage.getItem("queueless_token")) {
+    options.headers = { ...(options.headers || {}), Authorization: `Bearer ${customerToken}` };
+  }
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
@@ -47,6 +52,11 @@ export default function App() {
   const [token, setToken] = useState(
     localStorage.getItem("queueless_token") || ""
   );
+  const [customerToken, setCustomerToken] = useState(
+    localStorage.getItem("queueless_customer_token") || ""
+  );
+  const [customerAppointments, setCustomerAppointments] = useState([]);
+  const [customerTokens, setCustomerTokens] = useState([]);
 
   const [businessSlug, setBusinessSlug] = useState("demo-clinic");
   const [business, setBusiness] = useState(null);
@@ -67,6 +77,7 @@ export default function App() {
   const [regConfirm, setRegConfirm] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerPassword, setCustomerPassword] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [selectedService, setSelectedService] = useState("");
   const [appointmentTime, setAppointmentTime] = useState("");
@@ -194,6 +205,38 @@ export default function App() {
       setToken(data.access_token);
       notify("Registration successful");
       setShowRegister(false);
+    } catch (err) {
+      notify(err.message);
+    }
+  };
+
+  const customerLogin = async (e) => {
+    e.preventDefault();
+    try {
+      const data = await api("/customer-auth/login", { method: "POST", body: JSON.stringify({ email: customerEmail, password: customerPassword }) });
+      localStorage.setItem("queueless_customer_token", data.access_token);
+      setCustomerToken(data.access_token);
+      notify("Customer login successful");
+      try {
+        const appts = await api("/customer-auth/appointments");
+        setCustomerAppointments(appts.appointments || []);
+        const toks = await api("/customer-auth/queue-tokens");
+        setCustomerTokens(toks.tokens || []);
+      } catch (err) {
+        notify(err.message);
+      }
+    } catch (err) {
+      notify(err.message);
+    }
+  };
+
+  const customerRegister = async (e) => {
+    e.preventDefault();
+    try {
+      const data = await api("/customer-auth/register", { method: "POST", body: JSON.stringify({ full_name: customerName, email: customerEmail, phone: customerPhone, password: customerPassword }) });
+      localStorage.setItem("queueless_customer_token", data.access_token);
+      setCustomerToken(data.access_token);
+      notify("Customer registration successful");
     } catch (err) {
       notify(err.message);
     }
@@ -432,6 +475,28 @@ export default function App() {
               Simple check-in
               <span className="trust-separator">•</span>
               Live queue tracking
+            </div>
+
+            <div className="card">
+              <h2>Customer Account</h2>
+              <input className="input" placeholder="Full name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+              <input className="input" placeholder="Email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+              <input className="input" type="password" placeholder="Password" value={customerPassword} onChange={(e) => setCustomerPassword(e.target.value)} />
+              <button className="btn" onClick={customerRegister}>Register</button>
+              <button className="btn btn-secondary" onClick={customerLogin}>Login</button>
+              {customerToken && (
+                <>
+                  <p>Customer logged in.</p>
+                  <h3>My Appointments</h3>
+                  {customerAppointments.map((a) => (
+                    <p key={a.id}>{a.service_name} - {a.status} - {a.scheduled_at}</p>
+                  ))}
+                  <h3>My Tokens</h3>
+                  {customerTokens.map((t) => (
+                    <p key={t.id}>{t.token_number} - {t.status} - ahead: {t.ahead}</p>
+                  ))}
+                </>
+              )}
             </div>
 
             <div className="card">
