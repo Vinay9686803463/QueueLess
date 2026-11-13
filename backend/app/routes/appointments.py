@@ -174,11 +174,13 @@ def check_booking_conflict(business_id, service_id, scheduled_at, duration_minut
             FROM appointments a
             JOIN services s ON s.id = a.service_id
             WHERE a.business_id = :business_id
+              AND a.service_id = :service_id
               AND a.status NOT IN ('cancelled', 'no_show')
               AND (:exclude_id IS NULL OR a.id <> :exclude_id)
         """),
         {
             "business_id": business_id,
+            "service_id": service_id,
             "exclude_id": exclude_appointment_id,
         },
     ).mappings().all()
