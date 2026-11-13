@@ -76,14 +76,17 @@ describe("QueueLess frontend", () => {
         return jsonResponse({ access_token: "customer-token" });
       }
       if (String(url).includes("/api/customer-auth/appointments")) {
+        expect(options.headers.Authorization).toBe("Bearer customer-token");
         return jsonResponse({ appointments: [] });
       }
       if (String(url).includes("/api/customer-auth/queue-tokens")) {
+        expect(options.headers.Authorization).toBe("Bearer customer-token");
         return jsonResponse({ tokens: [] });
       }
       return jsonResponse({ message: "not found" }, 404);
     });
 
+    localStorage.setItem("queueless_token", "admin-token");
     render(<App />);
     const account = screen.getByRole("region", { name: "Customer Account" });
     await user.type(within(account).getByRole("textbox", { name: "Email" }), "taylor@example.com");
