@@ -123,6 +123,16 @@ ON services(business_id);
 -- Customer appointment bookings
 -- ==========================================
 
+CREATE TABLE IF NOT EXISTS customers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    full_name VARCHAR(120) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    phone VARCHAR(20),
+    password_hash TEXT NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS appointments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
@@ -135,6 +145,7 @@ CREATE TABLE IF NOT EXISTS appointments (
     customer_name VARCHAR(120) NOT NULL,
     customer_phone VARCHAR(20) NOT NULL,
     customer_email VARCHAR(255),
+    customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
     customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
 
     scheduled_at TIMESTAMPTZ NOT NULL,
