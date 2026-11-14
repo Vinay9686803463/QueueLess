@@ -381,7 +381,14 @@ def get_my_businesses():
                 SELECT
             """ + get_business_columns() + """
                 FROM businesses
-                WHERE owner_id = :owner_id
+                WHERE businesses.owner_id = :owner_id
+                   OR EXISTS (
+                       SELECT 1
+                       FROM business_staff
+                       WHERE business_staff.business_id = businesses.id
+                         AND business_staff.user_id = :owner_id
+                         AND business_staff.is_active = TRUE
+                   )
                 ORDER BY created_at DESC
             """),
             {"owner_id": g.current_user["id"]}

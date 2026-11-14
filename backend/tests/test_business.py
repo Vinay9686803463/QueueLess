@@ -155,6 +155,63 @@ def test_list_owned_businesses(client, owned_business):
     assert any(item["id"] == business_id for item in data["businesses"])
 
 
+def test_list_businesses_includes_active_staff_assignments(
+    client, app, owned_business
+):
+    owner, business_id, business_name = owned_business
+    staff_email = f"queueless-staff-{uuid.uuid4()}@example.com"
+    staff_response = client.post(
+        "/api/auth/register",
+        json={
+            "full_name": "QueueLess Staff User",
+            "email": staff_email,
+            "password": "TestPassword123!",
+        },
+    )
+    assert staff_response.status_code == 201
+    staff = staff_response.get_json()
+
+    try:
+        with app.app_context():
+            from app.extensions import db
+
+            db.session.execute(
+                text("""
+                    INSERT INTO business_staff (business_id, user_id, is_active)
+                    VALUES (:business_id, :user_id, TRUE)
+                """),
+                {
+                    "business_id": business_id,
+                    "user_id": staff["user"]["id"],
+                },
+            )
+            db.session.commit()
+
+        response = client.get(
+            "/api/businesses",
+            headers={"Authorization": f"Bearer {staff['access_token']}"},
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert any(
+            item["id"] == business_id and item["business_name"] == business_name
+            for item in data["businesses"]
+        )
+    finally:
+        with app.app_context():
+            from app.extensions import db
+
+            db.session.execute(
+                text("DELETE FROM business_staff WHERE user_id = :user_id"),
+                {"user_id": staff["user"]["id"]},
+            )
+            db.session.execute(
+                text("DELETE FROM users WHERE id = :user_id"),
+                {"user_id": staff["user"]["id"]},
+            )
+            db.session.commit()
+
+
 def test_get_owned_business(client, owned_business):
     registered_user, business_id, _ = owned_business
     response = client.get(
