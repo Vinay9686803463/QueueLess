@@ -435,7 +435,7 @@ describe("QueueLess frontend", () => {
       if (String(url).includes("/api/customer-auth/forgot-password")) {
         return jsonResponse({
           status: "error",
-          message: "Password reset email is not configured. Contact the system administrator.",
+          message: "Gmail did not accept the recipient address. Check the account email and try again.",
         }, 503);
       }
       return jsonResponse({ message: "not found" }, 404);
@@ -447,9 +447,38 @@ describe("QueueLess frontend", () => {
     await user.click(screen.getByRole("button", { name: "Send OTP" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Password reset email is not configured. Contact the system administrator."
+      "Gmail did not accept the recipient address. Check the account email and try again."
     );
     expect(screen.queryByLabelText("Verification code")).not.toBeInTheDocument();
+  });
+
+  it("finishes the send state and keeps account-enumeration-safe OTP guidance visible", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("/api/health")) return jsonResponse({});
+      if (String(url).includes("/api/customer-auth/forgot-password")) {
+        return jsonResponse({
+          status: "success",
+          message: "If this email matches an active account in this portal, a verification code will be sent.",
+        }, 202);
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    });
+
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Forgot password" }));
+    await user.type(
+      screen.getByLabelText("Registered email address"),
+      "customer@example.com"
+    );
+    await user.click(screen.getByRole("button", { name: "Send OTP" }));
+
+    expect(await screen.findByLabelText("Verification code")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "If this email matches an active account"
+    );
+    expect(screen.getByRole("button", { name: "Verify OTP" })).toBeEnabled();
+    expect(screen.queryByText("Verifying...")).not.toBeInTheDocument();
+    expect(fetch.mock.calls.some(([url]) => String(url).includes("/verify-otp"))).toBe(false);
   });
 
   it("switches to an independent admin portal, supports logout, and remembers the portal across refresh", async () => {

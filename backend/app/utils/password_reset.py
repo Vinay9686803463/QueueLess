@@ -66,14 +66,43 @@ def _send_otp_email(email, otp, account_type):
     if not _email_is_configured():
         raise RuntimeError("Password reset email is not configured.")
 
+    account_label = {
+        "admin": "Admin",
+        "customer": "Customer",
+    }[account_type]
     message = EmailMessage()
     message["Subject"] = "Your QueueLess password reset code"
     message["From"] = current_app.config["MAIL_DEFAULT_SENDER"]
     message["To"] = email
     message.set_content(
-        f"Your QueueLess {account_type} password reset code is {otp}.\n\n"
-        f"It expires in {OTP_LIFETIME_MINUTES} minutes. "
-        "If you did not request this, you can ignore this email."
+        f"QueueLess {account_label} password reset\n\n"
+        f"Your verification code is: {otp}\n\n"
+        f"This code expires in {OTP_LIFETIME_MINUTES} minutes.\n"
+        "Never share this code with anyone. QueueLess staff will never ask for it.\n\n"
+        "If you did not request a password reset, you can ignore this email."
+    )
+    message.add_alternative(
+        f"""\
+<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:32px;background:#071426;color:#e8f0ff;font-family:Arial,sans-serif">
+    <table role="presentation" style="max-width:560px;margin:0 auto;background:#10213b;border:1px solid #24446d;border-radius:16px">
+      <tr><td style="padding:32px">
+        <p style="margin:0;color:#60a5fa;font-size:13px;font-weight:bold;letter-spacing:2px">QUEUELESS</p>
+        <h1 style="margin:16px 0 8px;font-size:24px">Password reset verification</h1>
+        <p style="margin:0;color:#b8c8df">Account type: <strong>{account_label}</strong></p>
+        <p style="margin:28px 0 8px;color:#b8c8df">Your verification code</p>
+        <p style="margin:0;padding:18px;background:#071426;border-radius:10px;color:#93c5fd;font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center">{otp}</p>
+        <p style="margin:20px 0 0;color:#b8c8df">This code expires in {OTP_LIFETIME_MINUTES} minutes.</p>
+        <p style="margin:20px 0 0;color:#fbbf24"><strong>Security notice:</strong> Never share this code. QueueLess staff will never ask for it.</p>
+        <p style="margin:20px 0 0;color:#8798b2;font-size:13px">If you did not request a password reset, you can ignore this email.</p>
+      </td></tr>
+    </table>
+  </body>
+</html>
+"""
+        ,
+        subtype="html",
     )
 
     host = current_app.config["MAIL_SERVER"]
@@ -146,7 +175,11 @@ def send_otp(account_type, email):
     email = email.strip().lower()
     generic_response = {
         "status": "success",
-        "message": "If the email matches an active account in this portal, a verification code will be sent.",
+        "message": (
+            "If this email matches an active account in this portal, a verification "
+            "code will be sent. Check your inbox and spam folder; if no email "
+            "arrives, confirm that this address is registered in the selected portal."
+        ),
     }
 
     try:
@@ -329,9 +362,13 @@ def send_otp(account_type, email):
             )
 
         return jsonify(generic_response), 202
-    except Exception:
+    except Exception as error:
         db.session.rollback()
-        current_app.logger.exception("Password reset OTP request failed for %s account.", account_type)
+        current_app.logger.error(
+            "Password reset OTP request failed (portal=%s, error_type=%s).",
+            account_type,
+            type(error).__name__,
+        )
         return _error("Unable to start password reset. Please try again later.", 500)
 
 

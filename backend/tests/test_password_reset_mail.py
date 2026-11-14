@@ -52,6 +52,9 @@ def test_gmail_smtp_sender_uses_tls_auth_and_sends_message(monkeypatch):
         def __exit__(self, exc_type, exc_value, traceback):
             return False
 
+        def ehlo(self):
+            return 250, b"ok"
+
         def starttls(self):
             calls.append(("starttls",))
 
@@ -59,7 +62,16 @@ def test_gmail_smtp_sender_uses_tls_auth_and_sends_message(monkeypatch):
             calls.append(("login", username, password))
 
         def send_message(self, message):
-            calls.append(("send", message["To"], message["From"], message.get_content()))
+            plain_body = message.get_body(preferencelist=("plain",)).get_content()
+            html_body = message.get_body(preferencelist=("html",)).get_content()
+            calls.append((
+                "send",
+                message["To"],
+                message["From"],
+                plain_body,
+                html_body,
+            ))
+            return {}
 
     monkeypatch.setattr(password_reset.smtplib, "SMTP", FakeSMTP)
 
@@ -79,6 +91,10 @@ def test_gmail_smtp_sender_uses_tls_auth_and_sends_message(monkeypatch):
         "sender@example.com",
     )
     assert "123456" in calls[3][3]
+    assert "QUEUELESS" in calls[3][4]
+    assert "Account type: <strong>Customer</strong>" in calls[3][4]
+    assert "expires in 5 minutes" in calls[3][4]
+    assert "Never share this code" in calls[3][4]
 
 
 def test_gmail_smtp_sender_raises_when_recipient_is_refused(monkeypatch):
