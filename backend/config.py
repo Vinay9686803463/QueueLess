@@ -1,5 +1,6 @@
 
 import os
+from ipaddress import ip_address
 from importlib import import_module
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse, parse_qsl, urlencode, urlunparse
@@ -17,7 +18,21 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
 
-def get_database_url():
+def _is_loopback_host(host):
+    if not host:
+        return False
+
+    normalized_host = host.rstrip(".").lower()
+    if normalized_host == "localhost" or normalized_host.endswith(".localhost"):
+        return True
+
+    try:
+        return ip_address(normalized_host).is_loopback
+    except ValueError:
+        return False
+
+
+def get_database_url(environment=None):
     database_url = os.getenv("DATABASE_URL", "").strip()
 
     if not database_url:
@@ -29,6 +44,15 @@ def get_database_url():
         )
 
     parsed = urlparse(database_url)
+    active_environment = (
+        environment
+        if environment is not None
+        else os.getenv("FLASK_ENV", "development")
+    ).lower()
+    if active_environment == "production" and _is_loopback_host(parsed.hostname):
+        raise RuntimeError(
+            "DATABASE_URL must not use a loopback host when FLASK_ENV=production."
+        )
 
     # Percent-encode credentials so passwords containing special characters
     # such as @, :, or / are not misinterpreted as URL delimiters.
@@ -113,7 +137,7 @@ class Config:
     CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 
     # Database configuration
-    SQLALCHEMY_DATABASE_URI = get_database_url()
+    SQLALCHEMY_DATABASE_URI = get_database_url(ENV)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     SQLALCHEMY_ENGINE_OPTIONS = {
