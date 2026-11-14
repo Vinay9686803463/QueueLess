@@ -2235,3 +2235,86 @@ select {
 .login-card label { color: #cbd5e1; font-size: 14px; }
 .login-card .input { background: #0f172a; color: #ffffff; border: 1px solid #334155; }
 .btn-admin-login { background: linear-gradient(135deg, #007BFF, #17A2B8); border: none; }
+
+.topbar {
+  background: linear-gradient(135deg, #0f172a, #1e3a8a);
+  border-bottom-color: #ffffff20;
+}
+
+.topbar .brand {
+  color: #fff;
+}
+
+.topbar .brand-light {
+  color: #bfdbfe;
+}
+
+.topbar .btn-switch {
+  color: #fff;
+  background: #ffffff18;
+  border: 1px solid #ffffff35;
+}
+
+.login-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
+  gap: clamp(24px, 6vw, 88px);
+  width: 100%;
+  min-height: calc(100vh - 76px);
+  margin: 0;
+  padding: clamp(28px, 5vw, 64px);
+  background: linear-gradient(135deg, #0f172a, #1e3a8a);
+}
+
+.login-page .login-art {
+  width: 100%;
+  background: linear-gradient(145deg, #101c3b, #1d4ed8);
+}
+
+.login-page .login-card {
+  justify-self: center;
+  align-self: center;
+}
+
+.login-card > p {
+  color: #cbd5e1;
+}
+
+.login-card .eyebrow {
+  color: #93c5fd;
+}
+
+.portal-auth-toggle {
+  margin-top: 12px;
+}
+
+.customer-login-card .portal-auth-toggle {
+  width: 100%;
+}
+
+.portal-register-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.portal-register-form .input {
+  height: 47px;
+}
+
+.portal-register-form .btn {
+  margin-top: 4px;
+}
+
+@media (max-width: 760px) {
+  .login-page {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    min-height: calc(100vh - 68px);
+    padding: 26px 18px 38px;
+  }
+
+  .login-page .login-art {
+    min-height: 220px;
+  }
+}

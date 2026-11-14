@@ -4,29 +4,17 @@ import "./App.css";
 
 const API_BASE = "http://127.0.0.1:5000/api";
 
-function authHeaders() {
-  const token = localStorage.getItem("queueless_token");
+function authHeaders(token) {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function api(path, options = {}) {
-  const customerToken = localStorage.getItem("queueless_customer_token");
-  // merge customer token if present and no admin token
-  if (customerToken && !localStorage.getItem("queueless_token")) {
-    options.headers = { ...(options.headers || {}), Authorization: `Bearer ${customerToken}` };
-  }
+async function api(path, options = {}, token = "") {
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       ...(options.headers || {}),
-      ...authHeaders(),
-      ...(customerToken &&
-      (path.startsWith("/customer-auth/") ||
-        path.startsWith("/public/bookings") ||
-        path.startsWith("/public/walk-in"))
-        ? { Authorization: `Bearer ${customerToken}` }
-        : {}),
+      ...authHeaders(token),
     },
   });
   const data = await response.json().catch(() => ({}));
@@ -52,21 +40,20 @@ function StatCard({ label, value, detail, icon }) {
 }
 
 export default function App() {
-  const [role, setRole] = useState("customer");
+  const [role, setRole] = useState(
+    () => sessionStorage.getItem("queueless_portal") === "admin" ? "admin" : "customer"
+  );
   const [backendStatus, setBackendStatus] = useState("checking");
   const [notice, setNotice] = useState("");
-  const [token, setToken] = useState(
-    localStorage.getItem("queueless_token") || ""
-  );
-  const [customerToken, setCustomerToken] = useState(
-    localStorage.getItem("queueless_customer_token") || ""
-  );
+  const [token, setToken] = useState("");
+  const [customerToken, setCustomerToken] = useState("");
   const [customerAppointments, setCustomerAppointments] = useState([]);
   const [customerTokens, setCustomerTokens] = useState([]);
 
   const [businessSlug, setBusinessSlug] = useState("demo-clinic");
   const [business, setBusiness] = useState(null);
   const [publicServices, setPublicServices] = useState([]);
+  const [adminServices, setAdminServices] = useState([]);
   const [queue, setQueue] = useState([]);
   const [queuePaused, setQueuePaused] = useState(false);
   const [booking, setBooking] = useState(null);
@@ -77,6 +64,7 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
+  const [customerAuthMode, setCustomerAuthMode] = useState("login");
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
@@ -91,6 +79,11 @@ export default function App() {
 
   const [businesses, setBusinesses] = useState([]);
   const [selectedBusinessId, setSelectedBusinessId] = useState("");
+
+  useEffect(() => {
+    localStorage.removeItem("queueless_token");
+    localStorage.removeItem("queueless_customer_token");
+  }, []);
 
   useEffect(() => {
     fetch(`${API_BASE}/health`)
@@ -111,7 +104,6 @@ export default function App() {
     try {
       const biz = await api(`/public/business/${businessSlug}`);
       setBusiness(biz.business);
-      setSelectedBusinessId(biz.business.id);
 
       const svc = await api(`/public/business/${businessSlug}/services`);
       setPublicServices(svc.services || []);
@@ -139,17 +131,19 @@ export default function App() {
       if (mode === "appointment") {
         payload.appointment_time = appointmentTime;
 
-        data = await api("/public/bookings", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
+        data = await api(
+          "/public/bookings",
+          { method: "POST", body: JSON.stringify(payload) },
+          customerToken
+        );
 
         setBooking({ ...data, type: "appointment" });
       } else {
-        data = await api("/public/walk-in", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
+        data = await api(
+          "/public/walk-in",
+          { method: "POST", body: JSON.stringify(payload) },
+          customerToken
+        );
 
         setBooking({
           ...data,
@@ -188,7 +182,6 @@ export default function App() {
         body: JSON.stringify({ email, password }),
       });
 
-      localStorage.setItem("queueless_token", data.access_token);
       setToken(data.access_token);
       notify("Login successful");
     } catch (err) {
@@ -207,7 +200,6 @@ export default function App() {
         method: "POST",
         body: JSON.stringify({ full_name: regName, email: regEmail, password: regPassword }),
       });
-      localStorage.setItem("queueless_token", data.access_token);
       setToken(data.access_token);
       notify("Registration successful");
       setShowRegister(false);
@@ -216,18 +208,23 @@ export default function App() {
     }
   };
 
+  const loadCustomerAccount = async (authToken) => {
+    const [appointments, queueTokens] = await Promise.all([
+      api("/customer-auth/appointments", {}, authToken),
+      api("/customer-auth/queue-tokens", {}, authToken),
+    ]);
+    setCustomerAppointments(appointments.appointments || []);
+    setCustomerTokens(queueTokens.tokens || []);
+  };
+
   const customerLogin = async (e) => {
     e.preventDefault();
     try {
       const data = await api("/customer-auth/login", { method: "POST", body: JSON.stringify({ email: customerEmail, password: customerPassword }) });
-      localStorage.setItem("queueless_customer_token", data.access_token);
       setCustomerToken(data.access_token);
       notify("Customer login successful");
       try {
-        const appointments = await api("/customer-auth/appointments");
-        setCustomerAppointments(appointments.appointments || []);
-        const queueTokens = await api("/customer-auth/queue-tokens");
-        setCustomerTokens(queueTokens.tokens || []);
+        await loadCustomerAccount(data.access_token);
       } catch (err) {
         notify(err.message);
       }
@@ -240,27 +237,37 @@ export default function App() {
     e.preventDefault();
     try {
       const data = await api("/customer-auth/register", { method: "POST", body: JSON.stringify({ full_name: customerName, email: customerEmail, phone: customerPhone, password: customerPassword }) });
-      localStorage.setItem("queueless_customer_token", data.access_token);
       setCustomerToken(data.access_token);
       notify("Customer registration successful");
+      try {
+        await loadCustomerAccount(data.access_token);
+      } catch (err) {
+        notify(err.message);
+      }
     } catch (err) {
       notify(err.message);
     }
   };
 
+  const customerLogout = () => {
+    setCustomerToken("");
+    setCustomerAppointments([]);
+    setCustomerTokens([]);
+    notify("You have been logged out");
+  };
+
   const logout = () => {
-    localStorage.removeItem("queueless_token");
     setToken("");
     setBusinesses([]);
     setSelectedBusinessId("");
     setQueue([]);
-    setRole("customer");
+    setAdminServices([]);
     notify("You have been logged out");
   };
 
   const loadBusinesses = async () => {
     try {
-      const data = await api("/businesses");
+      const data = await api("/businesses", {}, token);
       const list = data.businesses || [];
 
       setBusinesses(list);
@@ -273,16 +280,16 @@ export default function App() {
     }
   };
 
-  const loadBusinessData = async (businessId) => {
+  const loadBusinessData = async (businessId, authToken = token) => {
     if (!businessId) return;
 
     try {
       const [svc, q] = await Promise.all([
-        api(`/businesses/${businessId}/services`),
-        api(`/businesses/${businessId}/queue`),
+        api(`/businesses/${businessId}/services`, {}, authToken),
+        api(`/businesses/${businessId}/queue`, {}, authToken),
       ]);
 
-      setPublicServices(svc.services || []);
+      setAdminServices(svc.services || []);
       setQueue(q.queue || q.waiting || []);
       setQueuePaused(q.queue_paused || false);
     } catch (err) {
@@ -307,7 +314,9 @@ export default function App() {
 
     try {
       const data = await api(
-        `/businesses/${selectedBusinessId}/queue`
+        `/businesses/${selectedBusinessId}/queue`,
+        {},
+        token
       );
 
       setQueue(data.queue || data.waiting || []);
@@ -323,7 +332,8 @@ export default function App() {
     try {
       await api(
         `/businesses/${selectedBusinessId}/queue/call-next`,
-        { method: "POST" }
+        { method: "POST" },
+        token
       );
 
       await loadBusinessData(selectedBusinessId);
@@ -339,7 +349,8 @@ export default function App() {
     try {
       await api(
         `/businesses/${selectedBusinessId}/queue/${tokenId}/${action}`,
-        { method: "POST" }
+        { method: "POST" },
+        token
       );
 
       await loadBusinessData(selectedBusinessId);
@@ -355,7 +366,8 @@ export default function App() {
     try {
       await api(
         `/businesses/${selectedBusinessId}/queue/pause`,
-        { method: "POST" }
+        { method: "POST" },
+        token
       );
 
       setQueuePaused(true);
@@ -371,7 +383,8 @@ export default function App() {
     try {
       await api(
         `/businesses/${selectedBusinessId}/queue/resume`,
-        { method: "POST" }
+        { method: "POST" },
+        token
       );
 
       setQueuePaused(false);
@@ -435,17 +448,25 @@ export default function App() {
 
           <button
             className="btn btn-switch"
-            onClick={() =>
-              setRole(role === "customer" ? "admin" : "customer")
-            }
+            onClick={() => {
+              const nextRole = role === "customer" ? "admin" : "customer";
+              sessionStorage.setItem("queueless_portal", nextRole);
+              setRole(nextRole);
+              setShowRegister(false);
+              setCustomerAuthMode("login");
+            }}
           >
             {role === "customer"
-              ? "Admin portal"
-              : "Customer view"}
+              ? "Switch to Admin Portal"
+              : "Switch to Customer Portal"}
           </button>
 
-          {token && (
-            <button className="btn btn-logout" onClick={logout}>
+          {((role === "admin" && token) ||
+            (role === "customer" && customerToken)) && (
+            <button
+              className="btn btn-logout"
+              onClick={role === "admin" ? logout : customerLogout}
+            >
               Logout
             </button>
           )}
@@ -458,7 +479,121 @@ export default function App() {
         </div>
       )}
 
-      {role === "customer" && (
+      {role === "customer" && !customerToken && (
+        <main className="login-page customer-login-page">
+          <div className="login-art">
+            <div className="login-art-orbit" />
+            <div className="login-art-card">
+              <span>Q</span>
+              <strong>QueueLess</strong>
+              <p>
+                Your time matters.
+                <br />
+                Stay in control of every visit.
+              </p>
+              <div className="mini-bars">
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+              </div>
+            </div>
+          </div>
+
+          <section className="login-card customer-login-card">
+            <span className="eyebrow">CUSTOMER PORTAL</span>
+            <h1>
+              {customerAuthMode === "login"
+                ? "Welcome back"
+                : "Create your account"}
+            </h1>
+            <p>
+              {customerAuthMode === "login"
+                ? "Sign in to book visits and track your place in line."
+                : "Register to manage your appointments and queue tokens."}
+            </p>
+
+            <form
+              onSubmit={
+                customerAuthMode === "login"
+                  ? customerLogin
+                  : customerRegister
+              }
+            >
+              {customerAuthMode === "register" && (
+                <>
+                  <label htmlFor="customer-register-name">Full name</label>
+                  <input
+                    id="customer-register-name"
+                    className="input"
+                    autoComplete="name"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    required
+                  />
+                  <label htmlFor="customer-register-phone">Phone number</label>
+                  <input
+                    id="customer-register-phone"
+                    className="input"
+                    type="tel"
+                    autoComplete="tel"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                  />
+                </>
+              )}
+
+              <label htmlFor="customer-email">Email address</label>
+              <input
+                id="customer-email"
+                className="input"
+                type="email"
+                autoComplete="email"
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+                required
+              />
+              <label htmlFor="customer-password">Password</label>
+              <input
+                id="customer-password"
+                className="input"
+                type="password"
+                autoComplete={
+                  customerAuthMode === "login"
+                    ? "current-password"
+                    : "new-password"
+                }
+                value={customerPassword}
+                onChange={(e) => setCustomerPassword(e.target.value)}
+                required
+              />
+              <button className="btn btn-admin-login" type="submit">
+                {customerAuthMode === "login"
+                  ? "Sign in to customer portal"
+                  : "Register"}
+                <span>→</span>
+              </button>
+            </form>
+
+            <button
+              className="btn btn-secondary portal-auth-toggle"
+              type="button"
+              onClick={() =>
+                setCustomerAuthMode((mode) =>
+                  mode === "login" ? "register" : "login"
+                )
+              }
+            >
+              {customerAuthMode === "login"
+                ? "Create customer account"
+                : "Back to customer login"}
+            </button>
+          </section>
+        </main>
+      )}
+
+      {role === "customer" && customerToken && (
         <main className="customer-page">
           <section className="customer-hero-layout">
             <div className="customer-hero-art">
@@ -494,63 +629,12 @@ export default function App() {
               <span className="eyebrow purple-eyebrow">CUSTOMER ACCOUNT</span>
               <h2>Welcome</h2>
               <p className="customer-account-description">
-                Sign in or create an account to keep track of your visits.
+                Keep track of your visits, appointments and queue tokens.
               </p>
               <section className="customer-account" aria-labelledby="customer-account-title">
                 <h3 id="customer-account-title">Customer Account</h3>
-              {!customerToken ? (
-                <>
-                  <input
-                    className="input"
-                    autoComplete="name"
-                    placeholder="Full name"
-                    aria-label="Full name"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                  />
-                  <input
-                    className="input"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="Email"
-                    aria-label="Email"
-                    value={customerEmail}
-                    onChange={(e) => setCustomerEmail(e.target.value)}
-                  />
-                  <input
-                    className="input"
-                    type="password"
-                    autoComplete="current-password"
-                    placeholder="Password"
-                    aria-label="Password"
-                    value={customerPassword}
-                    onChange={(e) => setCustomerPassword(e.target.value)}
-                  />
-                  <div className="customer-account-actions">
-                    <button className="btn btn-account" type="button" onClick={customerRegister}>
-                      Register
-                    </button>
-                    <button className="btn btn-account" type="button" onClick={customerLogin}>
-                      Login
-                    </button>
-                  </div>
-                </>
-              ) : (
                 <div className="customer-account-summary">
                   <p>You’re signed in. Your appointments and queue tokens are below.</p>
-                  <button
-                    className="btn btn-account"
-                    type="button"
-                    onClick={() => {
-                      localStorage.removeItem("queueless_customer_token");
-                      setCustomerToken("");
-                      setCustomerAppointments([]);
-                      setCustomerTokens([]);
-                      notify("You have been logged out");
-                    }}
-                  >
-                    Log out
-                  </button>
                   <div className="customer-account-records">
                     <div>
                       <h3>My appointments</h3>
@@ -572,7 +656,6 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-              )}
               </section>
             </div>
           </section>
@@ -869,64 +952,69 @@ export default function App() {
             </div>
           </div>
 
-          <form className="login-card" onSubmit={login}>
+          <section className="login-card">
             <span className="eyebrow">ADMINISTRATOR ACCESS</span>
             <h1>Welcome back</h1>
             <p>Sign in to manage your business queue.</p>
 
-            <label htmlFor="email">Email address</label>
-            <input
-              id="email"
-              className="input"
-              type="email"
-              placeholder="admin@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-
-            <label htmlFor="password">Password</label>
-            <div style={{ position: "relative" }}>
+            {!showRegister && (
+              <form onSubmit={login}>
+              <label htmlFor="email">Email address</label>
               <input
-                id="password"
+                id="email"
                 className="input"
-                type={showPassword ? "text" : "password"}
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                type="email"
+                placeholder="admin@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                style={{ position: "absolute", right: "10px", top: "10px", border: "none", background: "transparent", cursor: "pointer" }}
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? "Hide" : "Show"}
+
+              <label htmlFor="password">Password</label>
+              <div style={{ position: "relative" }}>
+                <input
+                  id="password"
+                  className="input"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  style={{ position: "absolute", right: "10px", top: "10px", border: "none", background: "transparent", cursor: "pointer" }}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+
+              <button className="btn btn-admin-login" type="submit">
+                Sign in to dashboard <span>→</span>
               </button>
-            </div>
+              </form>
+            )}
 
-            <button className="btn btn-admin-login" type="submit">
-              Sign in to dashboard <span>→</span>
-            </button>
-
-            <div style={{ marginTop: "12px" }}>
+            <div className="portal-auth-toggle">
               <button type="button" className="btn btn-secondary" onClick={() => setShowRegister((v) => !v)}>
-                {showRegister ? "Back to login" : "Create account"}
+              {showRegister ? "Back to login" : "Create account"}
               </button>
             </div>
 
             {showRegister && (
-              <form onSubmit={register} style={{ marginTop: "16px" }}>
-                <input className="input" placeholder="Full name" value={regName} onChange={(e) => setRegName(e.target.value)} required />
-                <input className="input" type="email" placeholder="Email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} required />
-                <input className="input" type="password" placeholder="Password" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} required />
+              <form className="portal-register-form" onSubmit={register}>
+              <input className="input" placeholder="Full name" value={regName} onChange={(e) => setRegName(e.target.value)} required />
+              <input className="input" type="email" placeholder="Email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} required />
+              <input className="input" type="password" placeholder="Password" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} required />
                 <input className="input" type="password" placeholder="Confirm password" value={regConfirm} onChange={(e) => setRegConfirm(e.target.value)} required />
                 <button className="btn" type="submit">Register</button>
               </form>
             )}
 
-            <div style={{ marginTop: "12px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            {!showRegister && (
+              <div style={{ marginTop: "12px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
               <button type="button" className="btn btn-secondary" onClick={async () => {
                 const email = prompt("Enter your registered email:");
                 if (!email) return;
@@ -947,12 +1035,13 @@ export default function App() {
               }}>
                 Forgot password
               </button>
-            </div>
+              </div>
+            )}
 
             <small className="login-footnote">
               Secure access for QueueLess business administrators.
             </small>
-          </form>
+          </section>
         </main>
       )}
 
@@ -992,10 +1081,6 @@ export default function App() {
                 <i />
                 API connection <strong>{backendStatus}</strong>
               </div>
-
-              <button onClick={logout}>
-                <Icon>↪</Icon>Logout
-              </button>
             </div>
           </aside>
 
@@ -1262,9 +1347,9 @@ export default function App() {
                     <span className="panel-icon">◈</span>
                   </div>
 
-                  {publicServices.length ? (
+                  {adminServices.length ? (
                     <ul className="service-list">
-                      {publicServices.map((s) => (
+                      {adminServices.map((s) => (
                         <li key={s.id}>
                           <span className="service-dot" />
                           <span>{s.service_name}</span>
