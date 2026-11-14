@@ -92,6 +92,20 @@ class Config:
 
     JWT_ACCESS_TOKEN_EXPIRES = 3600
 
+    # Password reset email delivery. MAIL_* settings take precedence; SMTP_*
+    # aliases keep compatibility with earlier local configurations.
+    MAIL_SERVER = os.getenv("MAIL_SERVER") or os.getenv("SMTP_HOST", "")
+    MAIL_PORT = int(os.getenv("MAIL_PORT") or os.getenv("SMTP_PORT", "587"))
+    MAIL_USE_TLS = (os.getenv("MAIL_USE_TLS") or os.getenv("SMTP_USE_TLS", "true")).lower() in (
+        "true", "1", "yes"
+    )
+    MAIL_USE_SSL = (os.getenv("MAIL_USE_SSL") or os.getenv("SMTP_USE_SSL", "false")).lower() in (
+        "true", "1", "yes"
+    )
+    MAIL_USERNAME = os.getenv("MAIL_USERNAME") or os.getenv("SMTP_USERNAME", "")
+    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD") or os.getenv("SMTP_PASSWORD", "")
+    MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER") or os.getenv("SMTP_FROM_EMAIL", "")
+
     # CORS
     CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 

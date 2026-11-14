@@ -270,6 +270,34 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Portal-scoped password reset OTPs and one-time reset authorizations
+CREATE TABLE IF NOT EXISTS password_reset_otps (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    customer_id UUID REFERENCES customers(id) ON DELETE CASCADE,
+    email VARCHAR(255) NOT NULL,
+    otp_hash CHAR(64) NOT NULL,
+    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+    expires_at TIMESTAMPTZ NOT NULL,
+    verified_at TIMESTAMPTZ,
+    used_at TIMESTAMPTZ,
+    reset_token_hash CHAR(64),
+    reset_expires_at TIMESTAMPTZ,
+    reset_used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK ((user_id IS NOT NULL) <> (customer_id IS NOT NULL))
+);
+
+CREATE INDEX IF NOT EXISTS idx_password_reset_otps_user
+ON password_reset_otps(user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_password_reset_otps_customer
+ON password_reset_otps(customer_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_password_reset_otps_authorization
+ON password_reset_otps(reset_token_hash)
+WHERE reset_token_hash IS NOT NULL;
+
 -- ==========================================
 -- 8. UPDATED_AT TRIGGER
 -- Automatically updates modification time

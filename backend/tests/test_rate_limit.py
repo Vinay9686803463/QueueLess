@@ -54,6 +54,12 @@ def test_rate_limited_endpoint_registration():
     rules = {rule.rule for rule in app.url_map.iter_rules()}
     assert "/api/auth/register" in rules
     assert "/api/auth/login" in rules
+    assert "/api/auth/forgot-password" in rules
+    assert "/api/auth/verify-otp" in rules
+    assert "/api/auth/reset-password" in rules
+    assert "/api/customer-auth/forgot-password" in rules
+    assert "/api/customer-auth/verify-otp" in rules
+    assert "/api/customer-auth/reset-password" in rules
     assert "/api/public/walk-in" in rules
     assert "/api/public/bookings" in rules
 

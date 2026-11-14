@@ -2284,12 +2284,24 @@ select {
   color: #93c5fd;
 }
 
-.portal-auth-toggle {
+.login-secondary-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 12px;
   margin-top: 12px;
 }
 
-.customer-login-card .portal-auth-toggle {
-  width: 100%;
+.login-secondary-actions .btn {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 42px;
+  padding: 10px 8px;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 .portal-register-form {
@@ -2306,6 +2318,175 @@ select {
   margin-top: 4px;
 }
 
+.password-recovery-panel form {
+  display: grid;
+}
+
+.password-recovery-panel .btn-admin-login {
+  margin-top: 16px;
+}
+
+.recovery-message {
+  margin: 0 0 12px;
+  padding: 11px 12px;
+  border: 1px solid #1d4ed8;
+  border-radius: 9px;
+  color: #dbeafe;
+  background: #172554;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.recovery-instructions {
+  margin: 0 0 14px;
+  color: #cbd5e1;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.recovery-instructions strong {
+  color: #fff;
+}
+
+.recovery-secondary-button,
+.recovery-back-button {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #334155;
+  border-radius: 9px;
+  color: #bfdbfe;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.recovery-secondary-button:hover:not(:disabled),
+.recovery-back-button:hover {
+  background: #ffffff10;
+}
+
+.recovery-secondary-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.recovery-password-field {
+  position: relative;
+}
+
+.recovery-password-field .input {
+  padding-right: 68px;
+}
+
+.recovery-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  border: 0;
+  color: #93c5fd;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.password-reset-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #020617bf;
+  animation: password-reset-fade-in 160ms ease-out;
+}
+
+.password-reset-dialog {
+  width: min(100%, 420px);
+  padding: 26px;
+  border: 1px solid #334155;
+  border-radius: 16px;
+  color: #e2e8f0;
+  background: #111827;
+  box-shadow: 0 20px 60px #0008;
+}
+
+.password-reset-dialog h2 {
+  margin: 0 0 10px;
+  color: #fff;
+  font-size: 22px;
+}
+
+.password-reset-dialog p {
+  margin: 0 0 18px;
+  color: #cbd5e1;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.password-reset-dialog .btn-admin-login {
+  margin-top: 0;
+}
+
+@keyframes password-reset-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.login-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 12px 0 0;
+  padding: 11px 12px;
+  border: 1px solid #7f1d1d;
+  border-radius: 9px;
+  color: #fecaca;
+  background: #450a0a;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.login-error-icon {
+  display: inline-grid;
+  flex: 0 0 18px;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.login-card .btn-admin-login:disabled {
+  cursor: wait;
+  opacity: 0.8;
+}
+
+.login-spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid #ffffff80;
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: login-spinner-rotate 0.7s linear infinite;
+}
+
+@keyframes login-spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 760px) {
   .login-page {
     grid-template-columns: 1fr;
@@ -2316,5 +2497,15 @@ select {
 
   .login-page .login-art {
     min-height: 220px;
+  }
+}
+
+@media (max-width: 440px) {
+  .login-secondary-actions {
+    flex-wrap: wrap;
+  }
+
+  .login-secondary-actions .btn {
+    flex-basis: 100%;
   }
 }
