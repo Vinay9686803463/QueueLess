@@ -242,6 +242,7 @@ export default function App() {
   const [queuePaused, setQueuePaused] = useState(false);
   const [queuePauseSupported, setQueuePauseSupported] = useState(true);
   const [businessesLoading, setBusinessesLoading] = useState(false);
+  const [businessesError, setBusinessesError] = useState("");
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [queueActionLoading, setQueueActionLoading] = useState("");
@@ -719,6 +720,7 @@ export default function App() {
 
   const loadBusinesses = async () => {
     setBusinessesLoading(true);
+    setBusinessesError("");
     try {
       const data = await api("/businesses", {}, token);
       const list = data.businesses || [];
@@ -737,6 +739,7 @@ export default function App() {
         setAdminAppointments([]);
       }
     } catch (err) {
+      setBusinessesError(err.message);
       notify(err.message);
     } finally {
       setBusinessesLoading(false);
@@ -2023,6 +2026,20 @@ export default function App() {
               <section className="dashboard-empty-state" role="status">
                 <span className="dashboard-loading-indicator" />
                 Loading your businesses...
+              </section>
+            ) : businessesError ? (
+              <section className="dashboard-empty-state" role="alert">
+                <span className="panel-icon">!</span>
+                <h2>Businesses could not be loaded</h2>
+                <p>{businessesError}</p>
+                <button
+                  className="btn btn-outline"
+                  type="button"
+                  onClick={loadBusinesses}
+                  disabled={businessesLoading}
+                >
+                  {businessesLoading ? "Retrying..." : "Retry"}
+                </button>
               </section>
             ) : !businesses.length ? (
               <section className="dashboard-empty-state">

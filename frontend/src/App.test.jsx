@@ -455,6 +455,55 @@ describe("QueueLess frontend", () => {
     expect(screen.queryByLabelText("Verification code")).not.toBeInTheDocument();
   });
 
+  it("shows a business API error instead of the no-business empty state", async () => {
+    let businessListRequests = 0;
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options = {}) => {
+      const requestUrl = String(url);
+      if (requestUrl.includes("/api/health")) return jsonResponse({});
+      if (requestUrl.includes("/api/auth/login")) {
+        return jsonResponse({ access_token: "admin-session-token" });
+      }
+      if (requestUrl.endsWith("/api/businesses")) {
+        businessListRequests += 1;
+        expect(options.headers.Authorization).toBe("Bearer admin-session-token");
+        if (businessListRequests === 1) {
+          return jsonResponse({
+            status: "error",
+            message: "Business list temporarily unavailable",
+          }, 500);
+        }
+        return jsonResponse({ status: "success", businesses: [] });
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    });
+
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Switch to Admin Portal" }));
+    await user.type(screen.getByLabelText("Email address"), "admin@example.com");
+    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.click(screen.getByRole("button", { name: /Sign in to dashboard/ }));
+
+    expect(await screen.findByRole("heading", {
+      name: "Businesses could not be loaded",
+    })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Business list temporarily unavailable"
+    );
+    expect(screen.queryByRole("heading", { name: "No business configured" })).not.toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/businesses"),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer admin-session-token",
+        }),
+      })
+    );
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("heading", { name: "No business configured" })).toBeInTheDocument();
+    expect(businessListRequests).toBe(2);
+  });
+
   it("does not enter OTP verification unless email delivery is confirmed", async () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
       if (String(url).includes("/api/health")) return jsonResponse({});

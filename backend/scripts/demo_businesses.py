@@ -614,7 +614,7 @@ def main(argv=None):
                 else seed_demo_businesses(db, args.owner_email)
             )
             db.session.commit()
-        except Exception:
+        except Exception as error:
             db.session.rollback()
             print(
                 f"Demo data operation failed ({type(error).__name__}); "
