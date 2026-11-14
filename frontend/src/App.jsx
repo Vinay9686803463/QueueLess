@@ -349,8 +349,14 @@ export default function App() {
         method: "POST",
         body: JSON.stringify({ email: recoveryEmail }),
       });
+      if (data.email_sent !== true) {
+        setRecoveryError(
+          "Unable to send a verification code. Check that the address belongs to this portal and try again."
+        );
+        return;
+      }
       setRecoveryStage("otp");
-      setRecoveryMessage(data.message || "If the email matches an active account in this portal, a verification code will be sent.");
+      setRecoveryMessage("");
       setRecoveryCooldown(60);
     } catch (error) {
       setRecoveryError(error.message);

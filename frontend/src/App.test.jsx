@@ -351,7 +351,8 @@ describe("QueueLess frontend", () => {
         expect(body.email).toBe(email);
         return jsonResponse({
           status: "success",
-          message: "If the email matches an active account in this portal, a verification code will be sent.",
+          email_sent: true,
+          message: "A verification code was sent. Check your inbox.",
         }, 202);
       }
       if (requestUrl.includes(`/api/${prefix}/verify-otp`)) {
@@ -393,7 +394,9 @@ describe("QueueLess frontend", () => {
     await user.type(screen.getByLabelText("Registered email address"), email);
     await user.click(screen.getByRole("button", { name: "Send OTP" }));
 
-    expect(await screen.findByText(/If the email matches an active account in this portal, a verification code will be sent/)).toBeInTheDocument();
+    expect(await screen.findByText(/Enter the six-digit code sent to/)).toBeInTheDocument();
+    expect(screen.getByText(email, { selector: "strong" })).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Resend OTP in 60s/ })).toBeDisabled();
     await user.type(screen.getByLabelText("Verification code"), "123456");
     await user.click(screen.getByRole("button", { name: "Verify OTP" }));
@@ -452,13 +455,14 @@ describe("QueueLess frontend", () => {
     expect(screen.queryByLabelText("Verification code")).not.toBeInTheDocument();
   });
 
-  it("finishes the send state and keeps account-enumeration-safe OTP guidance visible", async () => {
+  it("does not enter OTP verification unless email delivery is confirmed", async () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
       if (String(url).includes("/api/health")) return jsonResponse({});
       if (String(url).includes("/api/customer-auth/forgot-password")) {
         return jsonResponse({
-          status: "success",
-          message: "If this email matches an active account in this portal, a verification code will be sent.",
+          status: "accepted",
+          email_sent: false,
+          message: "If the email matches an active account in this portal, a verification code will be sent.",
         }, 202);
       }
       return jsonResponse({ message: "not found" }, 404);
@@ -472,12 +476,13 @@ describe("QueueLess frontend", () => {
     );
     await user.click(screen.getByRole("button", { name: "Send OTP" }));
 
-    expect(await screen.findByLabelText("Verification code")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "If this email matches an active account"
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Unable to send a verification code."
     );
-    expect(screen.getByRole("button", { name: "Verify OTP" })).toBeEnabled();
-    expect(screen.queryByText("Verifying...")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Verification code")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Registered email address")).toHaveValue("customer@example.com");
+    expect(screen.getByRole("button", { name: "Send OTP" })).toBeEnabled();
     expect(fetch.mock.calls.some(([url]) => String(url).includes("/verify-otp"))).toBe(false);
   });
 

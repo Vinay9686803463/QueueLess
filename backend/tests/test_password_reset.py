@@ -92,6 +92,7 @@ def test_admin_and_customer_resets_are_isolated_and_single_use(
             json={"email": email},
         )
         assert response.status_code == 202
+        assert response.get_json()["email_sent"] is True
         assert "otp" not in response.get_json()
         assert portal in codes
 
@@ -189,6 +190,33 @@ def test_admin_and_customer_resets_are_isolated_and_single_use(
             text("SELECT id::text FROM customers WHERE id = :id"),
             {"id": accounts["customer_id"]},
         ).scalar_one() == accounts["customer_id"]
+
+
+def test_unknown_account_response_does_not_confirm_email_delivery(
+        client, app, monkeypatch
+):
+        from app.utils import password_reset
+
+        monkeypatch.setitem(app.config, "MAIL_SERVER", "smtp.test")
+        monkeypatch.setitem(app.config, "MAIL_PORT", 587)
+        monkeypatch.setitem(app.config, "MAIL_USERNAME", "noreply@example.com")
+        monkeypatch.setitem(app.config, "MAIL_PASSWORD", "test-app-password")
+        monkeypatch.setitem(app.config, "MAIL_DEFAULT_SENDER", "noreply@example.com")
+        monkeypatch.setitem(app.config, "MAIL_USE_TLS", True)
+        monkeypatch.setitem(app.config, "MAIL_USE_SSL", False)
+        monkeypatch.setattr(
+            password_reset,
+            "_send_otp_email",
+            lambda *args: pytest.fail("No email should be sent for an unknown account."),
+        )
+
+        response = client.post(
+            "/api/auth/forgot-password",
+            json={"email": f"missing-{uuid.uuid4()}@example.com"},
+        )
+
+        assert response.status_code == 202
+        assert response.get_json()["email_sent"] is False
 
 
 def test_expired_and_exhausted_otps_are_rejected(

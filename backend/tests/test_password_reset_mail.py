@@ -89,7 +89,12 @@ def test_gmail_smtp_sender_uses_tls_auth_and_sends_message(
             account_type,
         )
 
-    assert calls[0] == ("connect", "smtp.gmail.com", 587, 10)
+    assert calls[0] == (
+        "connect",
+        "smtp.gmail.com",
+        587,
+        password_reset.SMTP_TIMEOUT_SECONDS,
+    )
     assert calls[1] == ("starttls",)
     assert calls[2] == ("login", "sender@example.com", "test-app-password")
     assert calls[3][0:3] == (

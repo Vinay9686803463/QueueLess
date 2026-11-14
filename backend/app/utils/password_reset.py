@@ -14,6 +14,7 @@ OTP_LIFETIME_MINUTES = 5
 OTP_RESEND_SECONDS = 60
 OTP_MAX_ATTEMPTS = 5
 RESET_LIFETIME_MINUTES = 10
+SMTP_TIMEOUT_SECONDS = 30
 PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 128
 
@@ -104,6 +105,16 @@ def _send_otp_email(email, otp, account_type):
         ,
         subtype="html",
     )
+    otp_in_template = otp in message.get_body(
+        preferencelist=("plain",)
+    ).get_content()
+    current_app.logger.info(
+        "Password reset email template created (portal=%s, otp_included=%s).",
+        account_type,
+        otp_in_template,
+    )
+    if not otp_in_template:
+        raise RuntimeError("Password reset email template is missing its code.")
 
     host = current_app.config["MAIL_SERVER"]
     port = current_app.config["MAIL_PORT"]
@@ -115,7 +126,7 @@ def _send_otp_email(email, otp, account_type):
     else:
         smtp_class = smtplib.SMTP
 
-    with smtp_class(host, port, timeout=10) as smtp:
+    with smtp_class(host, port, timeout=SMTP_TIMEOUT_SECONDS) as smtp:
         smtp.ehlo()
         current_app.logger.info(
             "Password reset SMTP connection established (portal=%s, server=%s, port=%s).",
@@ -139,6 +150,10 @@ def _send_otp_email(email, otp, account_type):
                 "Password reset SMTP authentication succeeded (portal=%s).",
                 account_type,
             )
+        current_app.logger.info(
+            "Password reset SMTP send invoked (portal=%s).",
+            account_type,
+        )
         refused = smtp.send_message(message)
         if refused:
             response_codes = sorted({
@@ -174,15 +189,19 @@ def send_otp(account_type, email):
         return _error("Enter a valid email address.", 400)
     email = email.strip().lower()
     generic_response = {
-        "status": "success",
+        "status": "accepted",
+        "email_sent": False,
         "message": (
-            "If this email matches an active account in this portal, a verification "
-            "code will be sent. Check your inbox and spam folder; if no email "
-            "arrives, confirm that this address is registered in the selected portal."
+            "If the email matches an active account in this portal, a verification "
+            "code will be sent."
         ),
     }
 
     try:
+        current_app.logger.info(
+            "Password reset request received (portal=%s).",
+            account_type,
+        )
         if not _email_is_configured():
             return _error(
                 "Password reset email is not configured. Contact the system administrator.",
@@ -195,11 +214,15 @@ def send_otp(account_type, email):
         ).mappings().first()
         if not account:
             current_app.logger.info(
-                "Password reset request has no active account in portal=%s.",
+                "Password reset account lookup found no active match (portal=%s).",
                 account_type,
             )
             return jsonify(generic_response), 202
 
+        current_app.logger.info(
+            "Password reset account lookup succeeded (portal=%s).",
+            account_type,
+        )
         db.session.execute(
             text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
             {"lock_key": f"{account_type}:{account['id']}"},
@@ -247,7 +270,12 @@ def send_otp(account_type, email):
             {"account_id": account["id"]},
         )
         otp = f"{secrets.randbelow(1_000_000):06d}"
-        challenge = db.session.execute(
+        current_app.logger.info(
+            "Password reset OTP generated (portal=%s, digits=%s).",
+            account_type,
+            len(otp),
+        )
+        challenge_id = db.session.execute(
             text(f"""
                 INSERT INTO password_reset_otps (
                     {account_column}, email, otp_hash, expires_at
@@ -264,8 +292,12 @@ def send_otp(account_type, email):
                 "otp_hash": _otp_digest(account_type, email, otp),
                 "lifetime": OTP_LIFETIME_MINUTES,
             },
-        )
+        ).scalar_one()
         db.session.commit()
+        current_app.logger.info(
+            "Password reset OTP hash persisted (portal=%s).",
+            account_type,
+        )
 
         try:
             current_app.logger.info(
@@ -281,7 +313,7 @@ def send_otp(account_type, email):
             )
             db.session.execute(
                 text("DELETE FROM password_reset_otps WHERE id = :id"),
-                {"id": challenge["id"]},
+                {"id": challenge_id},
             )
             db.session.commit()
             return _error(
@@ -301,7 +333,7 @@ def send_otp(account_type, email):
             )
             db.session.execute(
                 text("DELETE FROM password_reset_otps WHERE id = :id"),
-                {"id": challenge["id"]},
+                {"id": challenge_id},
             )
             db.session.commit()
             return _error(
@@ -322,7 +354,7 @@ def send_otp(account_type, email):
             )
             db.session.execute(
                 text("DELETE FROM password_reset_otps WHERE id = :id"),
-                {"id": challenge["id"]},
+                {"id": challenge_id},
             )
             db.session.commit()
             return _error(
@@ -338,7 +370,7 @@ def send_otp(account_type, email):
             )
             db.session.execute(
                 text("DELETE FROM password_reset_otps WHERE id = :id"),
-                {"id": challenge["id"]},
+                {"id": challenge_id},
             )
             db.session.commit()
             return _error(
@@ -353,7 +385,7 @@ def send_otp(account_type, email):
             )
             db.session.execute(
                 text("DELETE FROM password_reset_otps WHERE id = :id"),
-                {"id": challenge["id"]},
+                {"id": challenge_id},
             )
             db.session.commit()
             return _error(
@@ -361,7 +393,15 @@ def send_otp(account_type, email):
                 503,
             )
 
-        return jsonify(generic_response), 202
+        current_app.logger.info(
+            "Password reset email delivery confirmed by SMTP (portal=%s).",
+            account_type,
+        )
+        return jsonify({
+            "status": "success",
+            "email_sent": True,
+            "message": "A verification code was sent. Check your inbox.",
+        }), 202
     except Exception as error:
         db.session.rollback()
         current_app.logger.error(
