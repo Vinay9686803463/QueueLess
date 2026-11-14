@@ -567,6 +567,7 @@ describe("QueueLess frontend", () => {
   });
 
   it("renders admin queue, schedule, activity and service management and refreshes after actions", async () => {
+    let paused = false;
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options = {}) => {
       const requestUrl = String(url);
       if (requestUrl.includes("/api/health")) return jsonResponse({});
@@ -593,10 +594,26 @@ describe("QueueLess frontend", () => {
           }],
         });
       }
+      if (requestUrl.includes("/api/businesses/business-1/queue/demo")) {
+        return jsonResponse({
+          status: "success",
+          message: options.method === "DELETE"
+            ? "Removed 12 demo queue entries."
+            : "Created 12 demo queue entries.",
+        });
+      }
+      if (requestUrl.endsWith("/api/businesses/business-1/queue/pause")) {
+        paused = true;
+        return jsonResponse({ status: "success", queue_paused: true });
+      }
+      if (requestUrl.endsWith("/api/businesses/business-1/queue/resume")) {
+        paused = false;
+        return jsonResponse({ status: "success", queue_paused: false });
+      }
       if (requestUrl.includes("/api/businesses/business-1/queue")) {
         if (options.method === "POST") return jsonResponse({ status: "success" });
         return jsonResponse({
-          queue_paused: false,
+          queue_paused: paused,
           waiting: [{ id: "waiting-1", token_number: 4, customer_name: "Waiting Customer", status: "waiting" }],
           called: [{ id: "called-1", token_number: 3, customer_name: "Serving Customer", status: "called" }],
           completed: [],
@@ -635,26 +652,59 @@ describe("QueueLess frontend", () => {
     expect(await screen.findByText(/Serving Customer/)).toBeInTheDocument();
     expect(await screen.findAllByText(/Scheduled Customer/)).toHaveLength(2);
 
-    await user.click(screen.getByRole("button", { name: "Complete" }));
+    const waitForRequest = (path, method = "POST") =>
+      waitFor(() => expect(fetch.mock.calls.some(
+        ([url, options]) => String(url).includes(path) && options.method === method
+      ), `Expected ${method} request containing ${path}`).toBe(true));
+    const waitForQueueIdle = () =>
+      waitFor(() => expect(
+        screen.getAllByRole("button", { name: "Skip", exact: true })[0]
+      ).toBeEnabled());
+
+    await user.click(screen.getByRole("button", { name: "Complete Service" }));
+    await waitForRequest("/queue/called-1/complete");
+    await waitForQueueIdle();
     await user.click(screen.getAllByRole("button", { name: "Skip", exact: true })[0]);
+    await waitForRequest("/queue/waiting-1/skip");
+    await waitForQueueIdle();
+    await user.click(screen.getAllByRole("button", { name: "Cancel Entry", exact: true })[0]);
+    await waitForRequest("/queue/called-1/cancel");
+    await waitForQueueIdle();
     await user.click(screen.getAllByRole("button", { name: "Cancel", exact: true })[0]);
+    await waitForRequest("/queue/waiting-1/cancel");
+    await waitForQueueIdle();
     await user.click(screen.getAllByRole("button", { name: "Cancel", exact: true }).at(-1));
-    await user.click(screen.getAllByRole("button", { name: "Pause queue" })[0]);
-    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).includes("/queue/pause"))).toBe(true));
-    await user.click((await screen.findAllByRole("button", { name: "Resume queue" }))[0]);
-    await user.click(screen.getByRole("button", { name: "Call next", exact: true }));
+    await waitForRequest("/appointments/appointment-1", "DELETE");
+    await user.click(screen.getAllByRole("button", { name: "Pause Queue" })[0]);
+    await waitForRequest("/queue/pause");
+    await user.click((await screen.findAllByRole("button", { name: "Resume Queue" }))[0]);
+    await waitForRequest("/queue/resume");
+    await user.click(screen.getAllByRole("button", { name: "Call Next Customer", exact: true })[0]);
+    await waitForRequest("/queue/call-next");
+    await user.click(screen.getByRole("button", { name: "Generate 12 Demo Customers" }));
+    await waitForRequest("/queue/demo");
+    await user.click(screen.getByRole("button", { name: "Remove Demo Entries" }));
+    await waitForRequest("/queue/demo", "DELETE");
     await user.type(screen.getByLabelText("Service name"), "New service");
     await user.click(screen.getByRole("button", { name: "Add service" }));
+    await waitForRequest("/services", "POST");
     await user.click(screen.getByRole("button", { name: "Deactivate" }));
+    await waitForRequest("/services/service-1", "PUT");
     await user.click(screen.getByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("button", { name: "Save service" }));
+    await waitFor(() => expect(fetch.mock.calls.filter(
+      ([url, options]) => String(url).includes("/services/service-1") && options.method === "PUT"
+    ).length).toBeGreaterThan(1));
 
     expect(fetch.mock.calls.some(([url]) => String(url).includes("/queue/called-1/complete"))).toBe(true);
     expect(fetch.mock.calls.some(([url]) => String(url).includes("/queue/waiting-1/skip"))).toBe(true);
+    expect(fetch.mock.calls.some(([url]) => String(url).includes("/queue/called-1/cancel"))).toBe(true);
     expect(fetch.mock.calls.some(([url]) => String(url).includes("/queue/waiting-1/cancel"))).toBe(true);
     expect(fetch.mock.calls.some(([url]) => String(url).includes("/queue/pause"))).toBe(true);
     expect(fetch.mock.calls.some(([url]) => String(url).includes("/queue/resume"))).toBe(true);
     expect(fetch.mock.calls.some(([url]) => String(url).includes("/queue/call-next"))).toBe(true);
+    expect(fetch.mock.calls.some(([url, options]) => String(url).includes("/queue/demo") && options.method === "POST")).toBe(true);
+    expect(fetch.mock.calls.some(([url, options]) => String(url).includes("/queue/demo") && options.method === "DELETE")).toBe(true);
     expect(fetch.mock.calls.some(([url, options]) => String(url).includes("/services") && options.method === "POST")).toBe(true);
     expect(fetch.mock.calls.some(([url, options]) => String(url).includes("/services/service-1") && options.method === "PUT")).toBe(true);
     expect(fetch.mock.calls.some(([url, options]) => String(url).includes("/appointments/appointment-1") && options.method === "DELETE")).toBe(true);

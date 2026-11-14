@@ -240,6 +240,17 @@ export default function App() {
   const [adminAppointments, setAdminAppointments] = useState([]);
   const [queue, setQueue] = useState([]);
   const [queuePaused, setQueuePaused] = useState(false);
+  const [queuePauseSupported, setQueuePauseSupported] = useState(true);
+  const [businessesLoading, setBusinessesLoading] = useState(false);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [queueActionLoading, setQueueActionLoading] = useState("");
+  const [serviceActionLoading, setServiceActionLoading] = useState("");
+  const [demoActionLoading, setDemoActionLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState("");
+  const businessLoadRequest = useRef(0);
+  const selectedBusinessIdRef = useRef("");
+  const queueMutationInFlight = useRef(false);
   const [booking, setBooking] = useState(null);
   const [trackingCode, setTrackingCode] = useState("");
   const [trackedToken, setTrackedToken] = useState(null);
@@ -294,6 +305,10 @@ export default function App() {
     localStorage.removeItem("queueless_token");
     localStorage.removeItem("queueless_customer_token");
   }, []);
+
+  useEffect(() => {
+    selectedBusinessIdRef.current = selectedBusinessId;
+  }, [selectedBusinessId]);
 
   useEffect(() => {
     fetch(`${API_BASE}/health`)
@@ -681,12 +696,17 @@ export default function App() {
   };
 
   const logout = () => {
+    businessLoadRequest.current += 1;
     setToken("");
     setBusinesses([]);
     setSelectedBusinessId("");
     setQueue([]);
+    setQueuePaused(false);
+    setQueuePauseSupported(true);
     setAdminServices([]);
     setAdminAppointments([]);
+    setDashboardError("");
+    setDashboardLoading(false);
     setServiceForm({
       service_name: "",
       description: "",
@@ -698,23 +718,49 @@ export default function App() {
   };
 
   const loadBusinesses = async () => {
+    setBusinessesLoading(true);
     try {
       const data = await api("/businesses", {}, token);
       const list = data.businesses || [];
 
       setBusinesses(list);
-
-      if (!selectedBusinessId && list.length) {
-        setSelectedBusinessId(list[0].id);
+      setSelectedBusinessId((current) =>
+        list.some((item) => String(item.id) === String(current))
+          ? current
+          : list[0]?.id || ""
+      );
+      if (!list.length) {
+        setQueue([]);
+        setQueuePaused(false);
+        setQueuePauseSupported(true);
+        setAdminServices([]);
+        setAdminAppointments([]);
       }
     } catch (err) {
       notify(err.message);
+    } finally {
+      setBusinessesLoading(false);
     }
   };
 
-  const loadBusinessData = async (businessId, authToken = token) => {
-    if (!businessId) return;
+  const loadBusinessData = async (
+    businessId,
+    authToken = token,
+    { quiet = false } = {}
+  ) => {
+    if (!businessId) {
+      setQueue([]);
+      setQueuePaused(false);
+      setQueuePauseSupported(true);
+      setAdminServices([]);
+      setAdminAppointments([]);
+      setDashboardLoading(false);
+      return false;
+    }
 
+    const requestId = ++businessLoadRequest.current;
+    setDashboardError("");
+    if (!quiet) setDashboardLoading(true);
     try {
       const [svc, q, appointments] = await Promise.all([
         api(`/businesses/${businessId}/services`, {}, authToken),
@@ -722,16 +768,31 @@ export default function App() {
         api("/appointments", {}, authToken),
       ]);
 
+      if (
+        requestId !== businessLoadRequest.current ||
+        String(selectedBusinessIdRef.current) !== String(businessId)
+      ) {
+        return false;
+      }
       setAdminServices(svc.services || []);
       setQueue(getQueueRows(q));
       setQueuePaused(q.queue_paused || false);
+      setQueuePauseSupported(q.queue_pause_supported !== false);
       setAdminAppointments(
         (appointments.appointments || []).filter(
           (appointment) => String(appointment.business_id) === String(businessId)
         )
       );
+      return true;
     } catch (err) {
-      notify(err.message);
+      if (requestId === businessLoadRequest.current) {
+        setDashboardError(err.message);
+      }
+      return false;
+    } finally {
+      if (requestId === businessLoadRequest.current) {
+        setDashboardLoading(false);
+      }
     }
   };
 
@@ -742,7 +803,19 @@ export default function App() {
 
   useEffect(() => {
     if (selectedBusinessId && token) {
+      setQueue([]);
+      setQueuePaused(false);
+      setQueuePauseSupported(true);
+      setAdminServices([]);
+      setAdminAppointments([]);
       loadBusinessData(selectedBusinessId);
+    } else if (!selectedBusinessId) {
+      setQueue([]);
+      setQueuePaused(false);
+      setQueuePauseSupported(true);
+      setAdminServices([]);
+      setAdminAppointments([]);
+      setDashboardLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBusinessId, token]);
@@ -750,7 +823,7 @@ export default function App() {
   useEffect(() => {
     if (!selectedBusinessId || !token) return undefined;
     const timer = window.setInterval(
-      () => loadBusinessData(selectedBusinessId),
+      () => loadBusinessData(selectedBusinessId, token, { quiet: true }),
       15000
     );
     return () => window.clearInterval(timer);
@@ -758,94 +831,71 @@ export default function App() {
   }, [selectedBusinessId, token]);
 
   const loadQueue = async () => {
-    if (!selectedBusinessId) return;
-
+    if (!selectedBusinessId || refreshing) return;
+    setRefreshing(true);
     try {
-      const data = await api(
-        `/businesses/${selectedBusinessId}/queue`,
-        {},
-        token
-      );
+      const loaded = await loadBusinessData(selectedBusinessId);
+      if (loaded) notify("Dashboard refreshed");
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
-      setQueue(getQueueRows(data));
-      setQueuePaused(data.queue_paused || false);
-      const appointments = await api("/appointments", {}, token);
-      setAdminAppointments(
-        (appointments.appointments || []).filter(
-          (appointment) => String(appointment.business_id) === String(selectedBusinessId)
-        )
-      );
+  const performQueueAction = async (actionKey, requestPath, successMessage) => {
+    if (!selectedBusinessId || queueMutationInFlight.current) return;
+    queueMutationInFlight.current = true;
+    setQueueActionLoading(actionKey);
+    try {
+      await api(requestPath, { method: "POST" }, token);
+      const loaded = await loadBusinessData(selectedBusinessId);
+      if (loaded) notify(successMessage);
     } catch (err) {
       notify(err.message);
+    } finally {
+      queueMutationInFlight.current = false;
+      setQueueActionLoading("");
     }
   };
 
   const callNext = async () => {
-    if (!selectedBusinessId) return;
-
-    try {
-      await api(
-        `/businesses/${selectedBusinessId}/queue/call-next`,
-        { method: "POST" },
-        token
-      );
-
-      await loadBusinessData(selectedBusinessId);
-      notify("Next customer called");
-    } catch (err) {
-      notify(err.message);
+    if (queuePaused) {
+      notify("Resume the queue before calling the next customer.");
+      return;
     }
+    await performQueueAction(
+      "call-next",
+      `/businesses/${selectedBusinessId}/queue/call-next`,
+      "Next customer called"
+    );
   };
 
   const queueAction = async (tokenId, action) => {
-    if (!selectedBusinessId) return;
-
-    try {
-      await api(
-        `/businesses/${selectedBusinessId}/queue/${tokenId}/${action}`,
-        { method: "POST" },
-        token
-      );
-
-      await loadBusinessData(selectedBusinessId);
-      notify(`Token ${action} successful`);
-    } catch (err) {
-      notify(err.message);
-    }
+    const successMessages = {
+      complete: "Service completed",
+      skip: "Queue entry skipped",
+      cancel: "Queue entry cancelled",
+    };
+    await performQueueAction(
+      `${action}-${tokenId}`,
+      `/businesses/${selectedBusinessId}/queue/${tokenId}/${action}`,
+      successMessages[action] || `Token ${action} successful`
+    );
   };
 
   const pauseQueue = async () => {
-    if (!selectedBusinessId) return;
-
-    try {
-      await api(
-        `/businesses/${selectedBusinessId}/queue/pause`,
-        { method: "POST" },
-        token
-      );
-
-      setQueuePaused(true);
-      notify("Queue paused");
-    } catch (err) {
-      notify(err.message);
-    }
+    await performQueueAction(
+      "pause",
+      `/businesses/${selectedBusinessId}/queue/pause`,
+      "Queue paused"
+    );
   };
 
   const resumeQueue = async () => {
-    if (!selectedBusinessId) return;
-
-    try {
-      await api(
-        `/businesses/${selectedBusinessId}/queue/resume`,
-        { method: "POST" },
-        token
-      );
-
-      setQueuePaused(false);
-      notify("Queue resumed");
-    } catch (err) {
-      notify(err.message);
-    }
+    await performQueueAction(
+      "resume",
+      `/businesses/${selectedBusinessId}/queue/resume`,
+      "Queue resumed"
+    );
   };
 
   const cancelAdminAppointment = async (appointmentId) => {
@@ -860,15 +910,17 @@ export default function App() {
 
   const saveService = async (event) => {
     event.preventDefault();
-    if (!selectedBusinessId) return;
+    if (!selectedBusinessId || serviceActionLoading) return;
 
     const collectionPath = `/businesses/${selectedBusinessId}/services`;
+    const wasEditing = Boolean(editingServiceId);
     const payload = {
       service_name: serviceForm.service_name,
       description: serviceForm.description,
       duration_minutes: Number(serviceForm.duration_minutes),
       price: Number(serviceForm.price),
     };
+    setServiceActionLoading("save");
     try {
       await api(
         editingServiceId ? `${collectionPath}/${editingServiceId}` : collectionPath,
@@ -886,13 +938,17 @@ export default function App() {
       });
       setEditingServiceId("");
       await loadBusinessData(selectedBusinessId);
-      notify(editingServiceId ? "Service updated" : "Service created");
+      notify(wasEditing ? "Service updated" : "Service created");
     } catch (err) {
       notify(err.message);
+    } finally {
+      setServiceActionLoading("");
     }
   };
 
   const toggleServiceActive = async (service) => {
+    if (!selectedBusinessId || serviceActionLoading) return;
+    setServiceActionLoading(service.id);
     try {
       await api(
         `/businesses/${selectedBusinessId}/services/${service.id}`,
@@ -906,6 +962,26 @@ export default function App() {
       notify(service.is_active ? "Service deactivated" : "Service activated");
     } catch (err) {
       notify(err.message);
+    } finally {
+      setServiceActionLoading("");
+    }
+  };
+
+  const runDemoQueueAction = async (method) => {
+    if (!selectedBusinessId || demoActionLoading) return;
+    setDemoActionLoading(true);
+    try {
+      const result = await api(
+        `/businesses/${selectedBusinessId}/queue/demo`,
+        { method },
+        token
+      );
+      await loadBusinessData(selectedBusinessId);
+      notify(result.message || "Demo queue updated");
+    } catch (err) {
+      notify(err.message);
+    } finally {
+      setDemoActionLoading(false);
     }
   };
 
@@ -954,6 +1030,22 @@ export default function App() {
     () => queue.filter((item) => ["called", "serving", "in_progress"].includes(String(item.status).toLowerCase())),
     [queue]
   );
+  const completedCount = useMemo(
+    () => queue.filter((item) => String(item.status).toLowerCase() === "completed").length,
+    [queue]
+  );
+  const waitingByService = useMemo(() => {
+    const counts = new Map();
+    queue.forEach((item) => {
+      if (["waiting", "pending"].includes(String(item.status).toLowerCase())) {
+        counts.set(
+          String(item.service_id),
+          (counts.get(String(item.service_id)) || 0) + 1
+        );
+      }
+    });
+    return counts;
+  }, [queue]);
   const customerUpcomingAppointments = useMemo(
     () => customerAppointments.filter((item) =>
       ["booked", "confirmed"].includes(String(item.status).toLowerCase()) &&
@@ -1855,7 +1947,9 @@ export default function App() {
                 </span>
                 <h1>Dashboard</h1>
                 <p>
-                  Monitor your queue and manage customer flow.
+                  {selectedBusiness
+                    ? `Managing ${selectedBusiness.business_name}`
+                    : "Monitor your queue and manage customer flow."}
                 </p>
               </div>
 
@@ -1874,11 +1968,22 @@ export default function App() {
                   id="businessSelect"
                   className="input"
                   value={selectedBusinessId}
-                  onChange={(e) =>
-                    setSelectedBusinessId(e.target.value)
-                  }
+                  onChange={(event) => {
+                    businessLoadRequest.current += 1;
+                    selectedBusinessIdRef.current = event.target.value;
+                    setDashboardError("");
+                    setQueue([]);
+                    setQueuePaused(false);
+                    setQueuePauseSupported(true);
+                    setAdminServices([]);
+                    setAdminAppointments([]);
+                    setSelectedBusinessId(event.target.value);
+                  }}
+                  disabled={businessesLoading}
                 >
-                  <option value="">Select business</option>
+                  <option value="">
+                    {businessesLoading ? "Loading businesses..." : "Select business"}
+                  </option>
                   {businesses.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.business_name}
@@ -1888,19 +1993,57 @@ export default function App() {
               </div>
 
               <div className="toolbar-actions">
-                <button className="btn btn-outline" onClick={loadQueue}>
-                  ↻ Refresh
+                <button
+                  className="btn btn-outline"
+                  onClick={loadQueue}
+                  disabled={!selectedBusinessId || refreshing || dashboardLoading}
+                >
+                  {refreshing ? "Refreshing..." : "↻ Refresh"}
                 </button>
                 <button
                   className="btn btn-teal"
                   onClick={callNext}
-                  disabled={!selectedBusinessId || queuePaused}
+                  disabled={!selectedBusinessId || queuePaused || Boolean(queueActionLoading)}
                 >
-                  Call next customer →
+                  {queueActionLoading === "call-next" ? "Calling..." : "Call Next Customer →"}
                 </button>
               </div>
             </section>
 
+            {dashboardError && (
+              <div className="dashboard-error" role="alert">
+                <span>{dashboardError}</span>
+                <button type="button" onClick={loadQueue} disabled={refreshing}>
+                  Try again
+                </button>
+              </div>
+            )}
+
+            {businessesLoading ? (
+              <section className="dashboard-empty-state" role="status">
+                <span className="dashboard-loading-indicator" />
+                Loading your businesses...
+              </section>
+            ) : !businesses.length ? (
+              <section className="dashboard-empty-state">
+                <span className="panel-icon">⌂</span>
+                <h2>No business configured</h2>
+                <p>Create or join a business account to manage its queue and services.</p>
+              </section>
+            ) : !selectedBusinessId ? (
+              <section className="dashboard-empty-state">
+                <span className="panel-icon">⌖</span>
+                <h2>Select a business</h2>
+                <p>Choose one of your businesses above to load its queue and services.</p>
+              </section>
+            ) : (
+              <>
+            {dashboardLoading && (
+              <p className="dashboard-sync-status" role="status">
+                <span className="dashboard-loading-indicator" />
+                Loading {selectedBusiness?.business_name || "business"} data...
+              </p>
+            )}
             <section className="stats-grid">
               <StatCard
                 label="Total queue entries"
@@ -1921,12 +2064,24 @@ export default function App() {
                 icon="◉"
               />
               <StatCard
+                label="Completed customers"
+                value={completedCount}
+                detail="Completed today"
+                icon="✓"
+              />
+              <StatCard
                 label="Queue status"
-                value={queuePaused ? "Paused" : "Active"}
+                value={
+                  !queuePauseSupported
+                    ? "Unavailable"
+                    : queuePaused ? "Paused" : "Active"
+                }
                 detail={
-                  queuePaused
-                    ? "New calls are paused"
-                    : "Queue is accepting calls"
+                  !queuePauseSupported
+                    ? "Apply the queue pause database migration"
+                    : queuePaused
+                      ? "New calls are paused"
+                      : "Queue is accepting calls"
                 }
                 icon="⌁"
               />
@@ -1957,34 +2112,60 @@ export default function App() {
                   <button
                     className="btn btn-teal"
                     onClick={callNext}
-                    disabled={!selectedBusinessId || queuePaused}
+                    disabled={!selectedBusinessId || queuePaused || Boolean(queueActionLoading)}
                   >
-                    Call next
+                    {queueActionLoading === "call-next" ? "Calling..." : "Call Next Customer"}
                   </button>
 
                   <button
                     className="btn btn-outline"
                     onClick={pauseQueue}
-                    disabled={!selectedBusinessId || queuePaused}
+                    disabled={!selectedBusinessId || !queuePauseSupported || queuePaused || Boolean(queueActionLoading)}
                   >
-                    Pause queue
+                    {!queuePauseSupported
+                      ? "Pause unavailable"
+                      : queueActionLoading === "pause" ? "Pausing..." : "Pause Queue"}
                   </button>
 
                   <button
                     className="btn btn-outline"
                     onClick={resumeQueue}
-                    disabled={!selectedBusinessId || !queuePaused}
+                    disabled={!selectedBusinessId || !queuePauseSupported || !queuePaused || Boolean(queueActionLoading)}
                   >
-                    Resume queue
+                    {!queuePauseSupported
+                      ? "Resume unavailable"
+                      : queueActionLoading === "resume" ? "Resuming..." : "Resume Queue"}
                   </button>
+                  {import.meta.env.DEV && (
+                    <>
+                      <button
+                        className="btn btn-demo"
+                        type="button"
+                        onClick={() => runDemoQueueAction("POST")}
+                        disabled={!selectedBusinessId || demoActionLoading}
+                      >
+                        {demoActionLoading ? "Working..." : "Generate 12 Demo Customers"}
+                      </button>
+                      <button
+                        className="btn btn-outline"
+                        type="button"
+                        onClick={() => runDemoQueueAction("DELETE")}
+                        disabled={!selectedBusinessId || demoActionLoading}
+                      >
+                        Remove Demo Entries
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 <div className="table-wrap">
                   <table className="queue-table">
                     <thead>
                       <tr>
+                        <th>POSITION</th>
                         <th>TOKEN ID</th>
                         <th>CUSTOMER</th>
+                        <th>SERVICE</th>
                         <th>STATUS</th>
                         <th>ACTIONS</th>
                       </tr>
@@ -1992,12 +2173,24 @@ export default function App() {
 
                     <tbody>
                       {waitingQueue.length ? (
-                        waitingQueue.map((q) => (
+                        waitingQueue.map((q, index) => (
                           <tr key={q.id}>
+                            <td>
+                              <span className="queue-position">{q.queue_position || index + 1}</span>
+                            </td>
                             <td>
                               <strong>#{q.token_number}</strong>
                             </td>
-                            <td>{q.customer_name || "Customer"}</td>
+                            <td>
+                              <span className="queue-customer-name">{q.customer_name || "Customer"}</span>
+                              {q.is_demo && <span className="demo-badge">DEMO</span>}
+                            </td>
+                            <td>
+                              <span>{q.service_name || "Service"}</span>
+                              <small className="queue-service-duration">
+                                {q.duration_minutes ? `${q.duration_minutes} min` : ""}
+                              </small>
+                            </td>
                             <td>
                               <span
                                 className={`status-badge status-${String(
@@ -2010,17 +2203,15 @@ export default function App() {
                             <td>
                               <div className="row-actions">
                                 <button
-                                  onClick={() =>
-                                    queueAction(q.id, "skip")
-                                  }
+                                  onClick={() => queueAction(q.id, "skip")}
+                                  disabled={Boolean(queueActionLoading)}
                                 >
                                   Skip
                                 </button>
                                 <button
                                   className="danger-action"
-                                  onClick={() =>
-                                    queueAction(q.id, "cancel")
-                                  }
+                                  onClick={() => queueAction(q.id, "cancel")}
+                                  disabled={Boolean(queueActionLoading)}
                                 >
                                   Cancel
                                 </button>
@@ -2030,10 +2221,10 @@ export default function App() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan="4" className="empty-queue">
-                            {selectedBusinessId
-                              ? "No queue entries to display."
-                              : "Choose a business to load its queue."}
+                          <td colSpan="6" className="empty-queue">
+                            {dashboardLoading
+                              ? "Loading waiting list..."
+                              : "No customers are waiting in this queue."}
                           </td>
                         </tr>
                       )}
@@ -2076,19 +2267,28 @@ export default function App() {
                     <button
                       className="btn btn-teal"
                       onClick={callNext}
-                      disabled={!selectedBusinessId || queuePaused}
+                      disabled={!selectedBusinessId || queuePaused || Boolean(queueActionLoading)}
                     >
-                      Call next customer
+                      {queueActionLoading === "call-next" ? "Calling..." : "Call Next Customer"}
                     </button>
 
                     <button
                       className="btn btn-outline"
                       onClick={queuePaused ? resumeQueue : pauseQueue}
-                      disabled={!selectedBusinessId}
+                      disabled={!selectedBusinessId || !queuePauseSupported || Boolean(queueActionLoading)}
                     >
-                      {queuePaused ? "Resume queue" : "Pause queue"}
+                      {!queuePauseSupported
+                        ? "Pause control unavailable"
+                        : queuePaused
+                          ? queueActionLoading === "resume" ? "Resuming..." : "Resume Queue"
+                          : queueActionLoading === "pause" ? "Pausing..." : "Pause Queue"}
                     </button>
                   </div>
+                  {!queuePauseSupported && (
+                    <p className="migration-note">
+                      Apply <code>001_add_queue_paused_to_businesses.sql</code> to enable pause controls.
+                    </p>
+                  )}
                 </div>
 
                 <div
@@ -2192,13 +2392,20 @@ export default function App() {
                     <ul className="service-list">
                       {adminServices.map((s) => (
                         <li key={s.id}>
-                          <span className="service-dot" />
-                          <span className={s.is_active ? "" : "service-inactive"}>
-                            {s.service_name}
-                          </span>
-                          <small>{s.duration_minutes} min · {s.is_active ? "Active" : "Inactive"}</small>
+                          <span className={`service-dot ${s.is_active ? "" : "service-dot-inactive"}`} />
+                          <div className="service-summary">
+                            <strong className={s.is_active ? "" : "service-inactive"}>
+                              {s.service_name}
+                            </strong>
+                            <small>{s.description || "No service description provided."}</small>
+                          </div>
+                          <div className="service-metrics">
+                            <small>{s.duration_minutes} min · {s.is_active ? "Active" : "Inactive"}</small>
+                            <small>{waitingByService.get(String(s.id)) || 0} waiting</small>
+                          </div>
                           <button
                             type="button"
+                            disabled={Boolean(serviceActionLoading)}
                             onClick={() => {
                               setEditingServiceId(s.id);
                               setServiceForm({
@@ -2213,9 +2420,12 @@ export default function App() {
                           </button>
                           <button
                             type="button"
+                            disabled={Boolean(serviceActionLoading)}
                             onClick={() => toggleServiceActive(s)}
                           >
-                            {s.is_active ? "Deactivate" : "Activate"}
+                            {serviceActionLoading === s.id
+                              ? "Saving..."
+                              : s.is_active ? "Deactivate" : "Activate"}
                           </button>
                         </li>
                       ))}
@@ -2241,22 +2451,34 @@ export default function App() {
                 {activeQueue.length ? activeQueue.map((item) => (
                   <article className="admin-record" key={item.id}>
                     <div>
-                      <strong>Token #{item.token_number} · {item.customer_name || "Customer"}</strong>
+                      <strong>
+                        Token #{item.token_number} · {item.customer_name || "Customer"}
+                        {item.is_demo && <span className="demo-badge">DEMO</span>}
+                      </strong>
                       <span>{item.service_name || "Service"} · {item.status}</span>
                     </div>
                     <div className="row-actions">
-                      <button type="button" onClick={() => queueAction(item.id, "complete")}>
-                        Complete
+                      <button
+                        type="button"
+                        onClick={() => queueAction(item.id, "complete")}
+                        disabled={Boolean(queueActionLoading)}
+                      >
+                        {queueActionLoading === `complete-${item.id}` ? "Completing..." : "Complete Service"}
                       </button>
-                      <button type="button" onClick={() => queueAction(item.id, "skip")}>
+                      <button
+                        type="button"
+                        onClick={() => queueAction(item.id, "skip")}
+                        disabled={Boolean(queueActionLoading)}
+                      >
                         Skip
                       </button>
                       <button
                         type="button"
                         className="danger-action"
                         onClick={() => queueAction(item.id, "cancel")}
+                        disabled={Boolean(queueActionLoading)}
                       >
-                        Cancel
+                        Cancel Entry
                       </button>
                     </div>
                   </article>
@@ -2304,8 +2526,13 @@ export default function App() {
                     <h2>Real-Time Activity</h2>
                     <p>Queue and appointment changes · refreshed every 15 seconds</p>
                   </div>
-                  <button className="btn btn-outline" type="button" onClick={loadQueue}>
-                    Refresh
+                  <button
+                    className="btn btn-outline"
+                    type="button"
+                    onClick={loadQueue}
+                    disabled={refreshing || dashboardLoading}
+                  >
+                    {refreshing ? "Refreshing..." : "Refresh"}
                   </button>
                 </div>
                 {recentActivity.length ? recentActivity.map((item) => (
@@ -2319,6 +2546,8 @@ export default function App() {
                 )) : <p className="muted-empty">No queue or appointment activity yet.</p>}
               </div>
             </section>
+              </>
+            )}
 
             <footer className="admin-footer">
               QueueLess <span>•</span> Queue management workspace
