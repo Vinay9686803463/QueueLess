@@ -5,6 +5,9 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
 from ..extensions import db
+from ..utils.password_reset import reset_password as reset_password_for_account
+from ..utils.password_reset import send_otp, verify_otp
+from ..utils.rate_limit import rate_limiter
 
 customer_auth_bp = Blueprint("customer_auth", __name__, url_prefix="/api/customer-auth")
 
@@ -121,6 +124,31 @@ def login():
     except Exception:
         current_app.logger.exception("Customer login failed")
         return jsonify({"status": "error", "message": "Login failed."}), 500
+
+
+@customer_auth_bp.route("/forgot-password", methods=["POST"])
+@rate_limiter.limit(5, 300)
+def forgot_password():
+    data = request.get_json(silent=True) or {}
+    return send_otp("customer", data.get("email"))
+
+
+@customer_auth_bp.route("/verify-otp", methods=["POST"])
+@rate_limiter.limit(15, 300)
+def verify_password_reset_otp():
+    data = request.get_json(silent=True) or {}
+    return verify_otp("customer", data.get("email"), data.get("otp"))
+
+
+@customer_auth_bp.route("/reset-password", methods=["POST"])
+@rate_limiter.limit(10, 300)
+def reset_password():
+    data = request.get_json(silent=True) or {}
+    return reset_password_for_account(
+        "customer",
+        data.get("token"),
+        data.get("password"),
+    )
 
 
 @customer_auth_bp.route("/me", methods=["GET"])

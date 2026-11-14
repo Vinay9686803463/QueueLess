@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 
 const API_BASE = "http://127.0.0.1:5000/api";
@@ -20,6 +20,180 @@ async function api(path, options = {}, token = "") {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.message || data.error || "Request failed");
   return data;
+}
+
+function loginErrorMessage(error) {
+  const message = error instanceof Error ? error.message.trim() : "";
+  if (/^invalid email or password\.?$/i.test(message)) {
+    return "Invalid email or password.";
+  }
+  if (
+    !message ||
+    ["request failed", "failed to fetch", "fetch failed"].includes(
+      message.toLowerCase()
+    )
+  ) {
+    return "Unable to sign in right now. Please try again.";
+  }
+  return message;
+}
+
+function LoginError({ message }) {
+  if (!message) return null;
+  return (
+    <div className="login-error" role="alert">
+      <span className="login-error-icon" aria-hidden="true">!</span>
+      <span>{message}</span>
+    </div>
+  );
+}
+
+function PasswordRecoveryPanel({
+  portal,
+  stage,
+  email,
+  otp,
+  newPassword,
+  confirmPassword,
+  showNewPassword,
+  showConfirmPassword,
+  loading,
+  cooldown,
+  error,
+  message,
+  onEmailChange,
+  onOtpChange,
+  onNewPasswordChange,
+  onConfirmPasswordChange,
+  onToggleNewPassword,
+  onToggleConfirmPassword,
+  onSendOtp,
+  onVerifyOtp,
+  onResendOtp,
+  onChangePassword,
+  onBack,
+}) {
+  const portalLabel = portal === "admin" ? "administrator" : "customer";
+
+  return (
+    <div className="password-recovery-panel">
+      {message && <p className="recovery-message" role="status">{message}</p>}
+      <LoginError message={error} />
+
+      {stage === "forgot" && (
+        <form onSubmit={onSendOtp}>
+          <label htmlFor={`${portal}-recovery-email`}>Registered email address</label>
+          <input
+            id={`${portal}-recovery-email`}
+            className="input"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => onEmailChange(event.target.value)}
+            required
+          />
+          <button className="btn btn-admin-login" type="submit" disabled={loading}>
+            {loading ? "Sending OTP..." : "Send OTP"}
+          </button>
+          <button className="recovery-back-button" type="button" onClick={onBack}>
+            Back to {portal === "admin" ? "admin" : "customer"} login
+          </button>
+        </form>
+      )}
+
+      {stage === "otp" && (
+        <>
+          <p className="recovery-instructions">
+            Enter the six-digit code sent to <strong>{email}</strong> for your {portalLabel} account.
+          </p>
+          <form onSubmit={onVerifyOtp}>
+            <label htmlFor={`${portal}-recovery-otp`}>Verification code</label>
+            <input
+              id={`${portal}-recovery-otp`}
+              className="input"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              value={otp}
+              onChange={(event) => onOtpChange(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              required
+            />
+            <button className="btn btn-admin-login" type="submit" disabled={loading}>
+              {loading ? "Verifying..." : "Verify OTP"}
+            </button>
+          </form>
+          <button
+            className="recovery-secondary-button"
+            type="button"
+            onClick={onResendOtp}
+            disabled={loading || cooldown > 0}
+          >
+            {cooldown > 0 ? `Resend OTP in ${cooldown}s` : "Resend OTP"}
+          </button>
+          <button className="recovery-back-button" type="button" onClick={onBack}>
+            Back to login
+          </button>
+        </>
+      )}
+
+      {stage === "change" && (
+        <form onSubmit={onChangePassword}>
+          <label htmlFor={`${portal}-new-password`}>New Password</label>
+          <div className="recovery-password-field">
+            <input
+              id={`${portal}-new-password`}
+              className="input"
+              type={showNewPassword ? "text" : "password"}
+              autoComplete="new-password"
+              minLength={8}
+              maxLength={128}
+              value={newPassword}
+              onChange={(event) => onNewPasswordChange(event.target.value)}
+              required
+            />
+            <button
+              type="button"
+              className="recovery-password-toggle"
+              onClick={onToggleNewPassword}
+              aria-label={showNewPassword ? "Hide new password" : "Show new password"}
+            >
+              {showNewPassword ? "Hide" : "Show"}
+            </button>
+          </div>
+          <label htmlFor={`${portal}-confirm-password`}>Confirm Password</label>
+          <div className="recovery-password-field">
+            <input
+              id={`${portal}-confirm-password`}
+              className="input"
+              type={showConfirmPassword ? "text" : "password"}
+              autoComplete="new-password"
+              minLength={8}
+              maxLength={128}
+              value={confirmPassword}
+              onChange={(event) => onConfirmPasswordChange(event.target.value)}
+              required
+            />
+            <button
+              type="button"
+              className="recovery-password-toggle"
+              onClick={onToggleConfirmPassword}
+              aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+            >
+              {showConfirmPassword ? "Hide" : "Show"}
+            </button>
+          </div>
+          <button className="btn btn-admin-login" type="submit" disabled={loading}>
+            {loading ? "Changing password..." : "Change your password"}
+          </button>
+          <button className="recovery-back-button" type="button" onClick={onBack}>
+            Back to login
+          </button>
+        </form>
+      )}
+    </div>
+  );
 }
 
 function Icon({ children }) {
@@ -62,6 +236,25 @@ export default function App() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [adminLoginError, setAdminLoginError] = useState("");
+  const [customerLoginError, setCustomerLoginError] = useState("");
+  const [adminLoginLoading, setAdminLoginLoading] = useState(false);
+  const [customerLoginLoading, setCustomerLoginLoading] = useState(false);
+  const adminLoginInFlight = useRef(false);
+  const customerLoginInFlight = useRef(false);
+  const [recoveryStage, setRecoveryStage] = useState("login");
+  const [recoveryOtp, setRecoveryOtp] = useState("");
+  const [resetAuthorization, setResetAuthorization] = useState("");
+  const [newResetPassword, setNewResetPassword] = useState("");
+  const [confirmResetPassword, setConfirmResetPassword] = useState("");
+  const [showNewResetPassword, setShowNewResetPassword] = useState(false);
+  const [showConfirmResetPassword, setShowConfirmResetPassword] = useState(false);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const recoveryInFlight = useRef(false);
+  const [recoveryCooldown, setRecoveryCooldown] = useState(0);
+  const [recoveryError, setRecoveryError] = useState("");
+  const [recoveryMessage, setRecoveryMessage] = useState("");
+  const [passwordChanged, setPasswordChanged] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [customerAuthMode, setCustomerAuthMode] = useState("login");
@@ -98,6 +291,158 @@ export default function App() {
   const notify = (message) => {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 3500);
+  };
+
+  useEffect(() => {
+    if (recoveryCooldown <= 0) return undefined;
+    const timer = window.setTimeout(
+      () => setRecoveryCooldown((seconds) => Math.max(0, seconds - 1)),
+      1000
+    );
+    return () => window.clearTimeout(timer);
+  }, [recoveryCooldown]);
+
+  const clearPasswordRecovery = () => {
+    setRecoveryStage("login");
+    setRecoveryOtp("");
+    setResetAuthorization("");
+    setNewResetPassword("");
+    setConfirmResetPassword("");
+    setShowNewResetPassword(false);
+    setShowConfirmResetPassword(false);
+    setRecoveryLoading(false);
+    setRecoveryCooldown(0);
+    setRecoveryError("");
+    setRecoveryMessage("");
+  };
+
+  const returnToLogin = () => {
+    clearPasswordRecovery();
+    setShowRegister(false);
+    setCustomerAuthMode("login");
+  };
+
+  const startPasswordRecovery = () => {
+    setRecoveryStage("forgot");
+    setRecoveryOtp("");
+    setResetAuthorization("");
+    setNewResetPassword("");
+    setConfirmResetPassword("");
+    setRecoveryError("");
+    setRecoveryMessage("");
+  };
+
+  const sendPasswordResetOtp = async (event) => {
+    event.preventDefault();
+    if (recoveryInFlight.current) return;
+
+    const portal = role;
+    const recoveryEmail = portal === "admin" ? email : customerEmail;
+    const prefix = portal === "admin" ? "auth" : "customer-auth";
+    recoveryInFlight.current = true;
+    setRecoveryLoading(true);
+    setRecoveryError("");
+    setRecoveryMessage("");
+
+    try {
+      const data = await api(`/${prefix}/forgot-password`, {
+        method: "POST",
+        body: JSON.stringify({ email: recoveryEmail }),
+      });
+      setRecoveryStage("otp");
+      setRecoveryMessage(data.message || "If the email matches an active account in this portal, a verification code will be sent.");
+      setRecoveryCooldown(60);
+    } catch (error) {
+      setRecoveryError(error.message);
+    } finally {
+      recoveryInFlight.current = false;
+      setRecoveryLoading(false);
+    }
+  };
+
+  const verifyPasswordResetOtp = async (event) => {
+    event.preventDefault();
+    if (recoveryInFlight.current) return;
+
+    const portal = role;
+    const recoveryEmail = portal === "admin" ? email : customerEmail;
+    const prefix = portal === "admin" ? "auth" : "customer-auth";
+    recoveryInFlight.current = true;
+    setRecoveryLoading(true);
+    setRecoveryError("");
+    setRecoveryMessage("");
+
+    try {
+      const data = await api(`/${prefix}/verify-otp`, {
+        method: "POST",
+        body: JSON.stringify({ email: recoveryEmail, otp: recoveryOtp }),
+      });
+      if (!data.reset_token) {
+        throw new Error("Unable to verify the code. Please request a new one.");
+      }
+      setResetAuthorization(data.reset_token);
+      setRecoveryStage("change");
+      setRecoveryMessage("");
+    } catch (error) {
+      setRecoveryError(error.message);
+    } finally {
+      recoveryInFlight.current = false;
+      setRecoveryLoading(false);
+    }
+  };
+
+  const changePassword = async (event) => {
+    event.preventDefault();
+    if (recoveryInFlight.current) return;
+    setRecoveryError("");
+    if (newResetPassword.length < 8) {
+      setRecoveryError("Password must be at least 8 characters.");
+      return;
+    }
+    if (newResetPassword !== confirmResetPassword) {
+      setRecoveryError("The passwords do not match.");
+      return;
+    }
+    if (!resetAuthorization) {
+      setRecoveryError("Your reset authorization has expired. Request a new code.");
+      return;
+    }
+
+    const prefix = role === "admin" ? "auth" : "customer-auth";
+    recoveryInFlight.current = true;
+    setRecoveryLoading(true);
+    try {
+      await api(`/${prefix}/reset-password`, {
+        method: "POST",
+        body: JSON.stringify({
+          token: resetAuthorization,
+          password: newResetPassword,
+        }),
+      });
+      if (role === "admin") {
+        setToken("");
+      } else {
+        setCustomerToken("");
+        setCustomerAppointments([]);
+        setCustomerTokens([]);
+      }
+      setRecoveryStage("login");
+      setRecoveryOtp("");
+      setResetAuthorization("");
+      setNewResetPassword("");
+      setConfirmResetPassword("");
+      setPassword("");
+      setCustomerPassword("");
+      setRecoveryCooldown(0);
+      setRecoveryMessage("");
+      setRecoveryError("");
+      setPasswordChanged(true);
+    } catch (error) {
+      setRecoveryError(error.message);
+    } finally {
+      recoveryInFlight.current = false;
+      setRecoveryLoading(false);
+    }
   };
 
   const loadPublicBusiness = async () => {
@@ -175,6 +520,12 @@ export default function App() {
 
   const login = async (e) => {
     e.preventDefault();
+    if (adminLoginInFlight.current) return;
+
+    adminLoginInFlight.current = true;
+    setAdminLoginLoading(true);
+    setAdminLoginError("");
+    setToken("");
 
     try {
       const data = await api("/auth/login", {
@@ -182,10 +533,17 @@ export default function App() {
         body: JSON.stringify({ email, password }),
       });
 
+      if (!data.access_token) {
+        throw new Error("Unable to sign in right now. Please try again.");
+      }
       setToken(data.access_token);
       notify("Login successful");
     } catch (err) {
-      notify(err.message);
+      setToken("");
+      setAdminLoginError(loginErrorMessage(err));
+    } finally {
+      adminLoginInFlight.current = false;
+      setAdminLoginLoading(false);
     }
   };
 
@@ -219,8 +577,20 @@ export default function App() {
 
   const customerLogin = async (e) => {
     e.preventDefault();
+    if (customerLoginInFlight.current) return;
+
+    customerLoginInFlight.current = true;
+    setCustomerLoginLoading(true);
+    setCustomerLoginError("");
+    setCustomerToken("");
+    setCustomerAppointments([]);
+    setCustomerTokens([]);
+
     try {
       const data = await api("/customer-auth/login", { method: "POST", body: JSON.stringify({ email: customerEmail, password: customerPassword }) });
+      if (!data.access_token) {
+        throw new Error("Unable to sign in right now. Please try again.");
+      }
       setCustomerToken(data.access_token);
       notify("Customer login successful");
       try {
@@ -229,7 +599,11 @@ export default function App() {
         notify(err.message);
       }
     } catch (err) {
-      notify(err.message);
+      setCustomerToken("");
+      setCustomerLoginError(loginErrorMessage(err));
+    } finally {
+      customerLoginInFlight.current = false;
+      setCustomerLoginLoading(false);
     }
   };
 
@@ -448,12 +822,14 @@ export default function App() {
 
           <button
             className="btn btn-switch"
+            disabled={adminLoginLoading || customerLoginLoading || recoveryLoading}
             onClick={() => {
               const nextRole = role === "customer" ? "admin" : "customer";
               sessionStorage.setItem("queueless_portal", nextRole);
               setRole(nextRole);
-              setShowRegister(false);
-              setCustomerAuthMode("login");
+              returnToLogin();
+              setAdminLoginError("");
+              setCustomerLoginError("");
             }}
           >
             {role === "customer"
@@ -504,23 +880,32 @@ export default function App() {
           <section className="login-card customer-login-card">
             <span className="eyebrow">CUSTOMER PORTAL</span>
             <h1>
-              {customerAuthMode === "login"
-                ? "Welcome back"
-                : "Create your account"}
+              {recoveryStage === "login"
+                ? customerAuthMode === "login"
+                  ? "Welcome back"
+                  : "Create your account"
+                : recoveryStage === "forgot"
+                  ? "Forgot Password"
+                  : recoveryStage === "otp"
+                    ? "Verify OTP"
+                    : "Change Password"}
             </h1>
             <p>
-              {customerAuthMode === "login"
-                ? "Sign in to book visits and track your place in line."
-                : "Register to manage your appointments and queue tokens."}
+              {recoveryStage !== "login"
+                ? "Securely recover access to your customer account."
+                : customerAuthMode === "login"
+                  ? "Sign in to book visits and track your place in line."
+                  : "Register to manage your appointments and queue tokens."}
             </p>
 
-            <form
-              onSubmit={
-                customerAuthMode === "login"
-                  ? customerLogin
-                  : customerRegister
-              }
-            >
+            {recoveryStage === "login" ? (
+              <form
+                onSubmit={
+                  customerAuthMode === "login"
+                    ? customerLogin
+                    : customerRegister
+                }
+              >
               {customerAuthMode === "register" && (
                 <>
                   <label htmlFor="customer-register-name">Full name</label>
@@ -550,8 +935,12 @@ export default function App() {
                 className="input"
                 type="email"
                 autoComplete="email"
+                disabled={customerLoginLoading}
                 value={customerEmail}
-                onChange={(e) => setCustomerEmail(e.target.value)}
+                onChange={(e) => {
+                  setCustomerEmail(e.target.value);
+                  setCustomerLoginError("");
+                }}
                 required
               />
               <label htmlFor="customer-password">Password</label>
@@ -559,36 +948,110 @@ export default function App() {
                 id="customer-password"
                 className="input"
                 type="password"
+                disabled={customerLoginLoading}
                 autoComplete={
                   customerAuthMode === "login"
                     ? "current-password"
                     : "new-password"
                 }
                 value={customerPassword}
-                onChange={(e) => setCustomerPassword(e.target.value)}
+                onChange={(e) => {
+                  setCustomerPassword(e.target.value);
+                  setCustomerLoginError("");
+                }}
                 required
               />
-              <button className="btn btn-admin-login" type="submit">
+              {customerAuthMode === "login" && (
+                <LoginError message={customerLoginError} />
+              )}
+              <button
+                className="btn btn-admin-login"
+                type="submit"
+                disabled={customerAuthMode === "login" && customerLoginLoading}
+              >
                 {customerAuthMode === "login"
-                  ? "Sign in to customer portal"
+                  ? customerLoginLoading
+                    ? "Signing in..."
+                    : "Sign in to customer portal"
                   : "Register"}
-                <span>→</span>
+                {customerAuthMode === "login" && customerLoginLoading ? (
+                  <span className="login-spinner" aria-hidden="true" />
+                ) : (
+                  <span aria-hidden="true">→</span>
+                )}
               </button>
-            </form>
+              </form>
+            ) : (
+              <PasswordRecoveryPanel
+                portal="customer"
+                stage={recoveryStage}
+                email={customerEmail}
+                otp={recoveryOtp}
+                newPassword={newResetPassword}
+                confirmPassword={confirmResetPassword}
+                showNewPassword={showNewResetPassword}
+                showConfirmPassword={showConfirmResetPassword}
+                loading={recoveryLoading}
+                cooldown={recoveryCooldown}
+                error={recoveryError}
+                message={recoveryMessage}
+                onEmailChange={(value) => {
+                  setCustomerEmail(value);
+                  setRecoveryError("");
+                }}
+                onOtpChange={(value) => {
+                  setRecoveryOtp(value);
+                  setRecoveryError("");
+                }}
+                onNewPasswordChange={(value) => {
+                  setNewResetPassword(value);
+                  setRecoveryError("");
+                }}
+                onConfirmPasswordChange={(value) => {
+                  setConfirmResetPassword(value);
+                  setRecoveryError("");
+                }}
+                onToggleNewPassword={() => setShowNewResetPassword((value) => !value)}
+                onToggleConfirmPassword={() => setShowConfirmResetPassword((value) => !value)}
+                onSendOtp={sendPasswordResetOtp}
+                onVerifyOtp={verifyPasswordResetOtp}
+                onResendOtp={sendPasswordResetOtp}
+                onChangePassword={changePassword}
+                onBack={returnToLogin}
+              />
+            )}
 
-            <button
-              className="btn btn-secondary portal-auth-toggle"
-              type="button"
-              onClick={() =>
-                setCustomerAuthMode((mode) =>
-                  mode === "login" ? "register" : "login"
-                )
-              }
-            >
-              {customerAuthMode === "login"
-                ? "Create customer account"
-                : "Back to customer login"}
-            </button>
+            {recoveryStage === "login" && (
+              <div className="login-secondary-actions">
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  disabled={customerLoginLoading}
+                  onClick={() => {
+                    setCustomerLoginError("");
+                    setCustomerAuthMode((mode) =>
+                      mode === "login" ? "register" : "login"
+                    );
+                  }}
+                >
+                  {customerAuthMode === "login"
+                    ? "Create customer account"
+                    : "Back to customer login"}
+                </button>
+                {customerAuthMode === "login" && (
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={startPasswordRecovery}
+                  >
+                    Forgot password
+                  </button>
+                )}
+              </div>
+            )}
+            <small className="login-footnote">
+              Secure access for QueueLess customers.
+            </small>
           </section>
         </main>
       )}
@@ -954,10 +1417,24 @@ export default function App() {
 
           <section className="login-card">
             <span className="eyebrow">ADMINISTRATOR ACCESS</span>
-            <h1>Welcome back</h1>
-            <p>Sign in to manage your business queue.</p>
+            <h1>
+              {recoveryStage === "login"
+                ? showRegister ? "Create your account" : "Welcome back"
+                : recoveryStage === "forgot"
+                  ? "Forgot Password"
+                  : recoveryStage === "otp"
+                    ? "Verify OTP"
+                    : "Change Password"}
+            </h1>
+            <p>
+              {recoveryStage !== "login"
+                ? "Securely recover access to your administrator account."
+                : showRegister
+                  ? "Register your QueueLess administrator account."
+                  : "Sign in to manage your business queue."}
+            </p>
 
-            {!showRegister && (
+            {recoveryStage === "login" && !showRegister && (
               <form onSubmit={login}>
               <label htmlFor="email">Email address</label>
               <input
@@ -965,8 +1442,12 @@ export default function App() {
                 className="input"
                 type="email"
                 placeholder="admin@example.com"
+                disabled={adminLoginLoading}
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setAdminLoginError("");
+                }}
                 required
               />
 
@@ -977,12 +1458,17 @@ export default function App() {
                   className="input"
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
+                  disabled={adminLoginLoading}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setAdminLoginError("");
+                  }}
                   required
                 />
                 <button
                   type="button"
+                  disabled={adminLoginLoading}
                   onClick={() => setShowPassword((v) => !v)}
                   style={{ position: "absolute", right: "10px", top: "10px", border: "none", background: "transparent", cursor: "pointer" }}
                   aria-label={showPassword ? "Hide password" : "Show password"}
@@ -991,19 +1477,23 @@ export default function App() {
                 </button>
               </div>
 
-              <button className="btn btn-admin-login" type="submit">
-                Sign in to dashboard <span>→</span>
+              <LoginError message={adminLoginError} />
+              <button
+                className="btn btn-admin-login"
+                type="submit"
+                disabled={adminLoginLoading}
+              >
+                {adminLoginLoading ? "Signing in..." : "Sign in to dashboard"}
+                {adminLoginLoading ? (
+                  <span className="login-spinner" aria-hidden="true" />
+                ) : (
+                  <span aria-hidden="true">→</span>
+                )}
               </button>
               </form>
             )}
 
-            <div className="portal-auth-toggle">
-              <button type="button" className="btn btn-secondary" onClick={() => setShowRegister((v) => !v)}>
-              {showRegister ? "Back to login" : "Create account"}
-              </button>
-            </div>
-
-            {showRegister && (
+            {recoveryStage === "login" && showRegister && (
               <form className="portal-register-form" onSubmit={register}>
               <input className="input" placeholder="Full name" value={regName} onChange={(e) => setRegName(e.target.value)} required />
               <input className="input" type="email" placeholder="Email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} required />
@@ -1013,28 +1503,68 @@ export default function App() {
               </form>
             )}
 
-            {!showRegister && (
-              <div style={{ marginTop: "12px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
-              <button type="button" className="btn btn-secondary" onClick={async () => {
-                const email = prompt("Enter your registered email:");
-                if (!email) return;
-                try {
-                  const data = await api("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
-                  if (data.reset_token) {
-                    const newPassword = prompt("Dev reset token received. Enter new password:");
-                    if (newPassword) {
-                      await api("/auth/reset-password", { method: "POST", body: JSON.stringify({ token: data.reset_token, password: newPassword }) });
-                      alert("Password reset successful.");
-                    }
-                  } else {
-                    alert("If the email exists, a reset link has been sent.");
-                  }
-                } catch (err) {
-                  alert(err.message);
-                }
-              }}>
-                Forgot password
-              </button>
+            {recoveryStage !== "login" && (
+              <PasswordRecoveryPanel
+                portal="admin"
+                stage={recoveryStage}
+                email={email}
+                otp={recoveryOtp}
+                newPassword={newResetPassword}
+                confirmPassword={confirmResetPassword}
+                showNewPassword={showNewResetPassword}
+                showConfirmPassword={showConfirmResetPassword}
+                loading={recoveryLoading}
+                cooldown={recoveryCooldown}
+                error={recoveryError}
+                message={recoveryMessage}
+                onEmailChange={(value) => {
+                  setEmail(value);
+                  setRecoveryError("");
+                }}
+                onOtpChange={(value) => {
+                  setRecoveryOtp(value);
+                  setRecoveryError("");
+                }}
+                onNewPasswordChange={(value) => {
+                  setNewResetPassword(value);
+                  setRecoveryError("");
+                }}
+                onConfirmPasswordChange={(value) => {
+                  setConfirmResetPassword(value);
+                  setRecoveryError("");
+                }}
+                onToggleNewPassword={() => setShowNewResetPassword((value) => !value)}
+                onToggleConfirmPassword={() => setShowConfirmResetPassword((value) => !value)}
+                onSendOtp={sendPasswordResetOtp}
+                onVerifyOtp={verifyPasswordResetOtp}
+                onResendOtp={sendPasswordResetOtp}
+                onChangePassword={changePassword}
+                onBack={returnToLogin}
+              />
+            )}
+
+            {recoveryStage === "login" && (
+              <div className="login-secondary-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={adminLoginLoading}
+                  onClick={() => {
+                    setAdminLoginError("");
+                    setShowRegister((value) => !value);
+                  }}
+                >
+                  {showRegister ? "Back to login" : "Create account"}
+                </button>
+                {!showRegister && (
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={startPasswordRecovery}
+                  >
+                    Forgot password
+                  </button>
+                )}
               </div>
             )}
 
@@ -1370,6 +1900,27 @@ export default function App() {
               QueueLess <span>•</span> Queue management workspace
             </footer>
           </main>
+        </div>
+      )}
+
+      {passwordChanged && (
+        <div className="password-reset-overlay">
+          <section
+            className="password-reset-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="password-reset-success-title"
+          >
+            <h2 id="password-reset-success-title">Password changed</h2>
+            <p>Your password has been changed successfully! Please log in with your new password.</p>
+            <button
+              className="btn btn-admin-login"
+              type="button"
+              onClick={() => setPasswordChanged(false)}
+            >
+              OK
+            </button>
+          </section>
         </div>
       )}
     </div>

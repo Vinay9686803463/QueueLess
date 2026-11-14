@@ -180,6 +180,278 @@ describe("QueueLess frontend", () => {
     expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
   });
 
+  it.each([
+    ["admin", "incorrect email", "unknown-admin@example.com", "password123", "/api/auth/login"],
+    ["admin", "incorrect password", "admin@example.com", "wrong-password", "/api/auth/login"],
+    ["customer", "incorrect email", "unknown-customer@example.com", "password123", "/api/customer-auth/login"],
+    ["customer", "incorrect password", "customer@example.com", "wrong-password", "/api/customer-auth/login"],
+  ])("shows an inline error for %s %s and clears it when corrected", async (portal, _caseName, loginEmail, loginPassword, endpoint) => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("/api/health")) return jsonResponse({});
+      return jsonResponse({ message: "Invalid email or password" }, 401);
+    });
+
+    render(<App />);
+    if (portal === "admin") {
+      await user.click(screen.getByRole("button", { name: "Switch to Admin Portal" }));
+    }
+
+    await user.type(screen.getByLabelText("Email address"), loginEmail);
+    await user.type(screen.getByLabelText("Password"), loginPassword);
+    await user.click(screen.getByRole("button", {
+      name: portal === "admin" ? /Sign in to dashboard/ : /Sign in to customer portal/,
+    }));
+
+    const error = await screen.findByRole("alert");
+    expect(error).toHaveTextContent("Invalid email or password.");
+    expect(error).toHaveClass("login-error");
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining(endpoint),
+      expect.objectContaining({
+        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+      })
+    );
+    expect(screen.queryByRole("heading", { name: "Dashboard" })).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Password"), "1");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it.each(["admin", "customer"])("%s login prevents duplicate submissions and shows loading", async (portal) => {
+    let finishLogin;
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/api/health")) return Promise.resolve(jsonResponse({}));
+      return new Promise((resolve) => {
+        finishLogin = () => resolve(jsonResponse({ message: "Invalid email or password" }, 401));
+      });
+    });
+
+    render(<App />);
+    if (portal === "admin") {
+      await user.click(screen.getByRole("button", { name: "Switch to Admin Portal" }));
+    }
+    await user.type(screen.getByLabelText("Email address"), `${portal}@example.com`);
+    await user.type(screen.getByLabelText("Password"), "wrong-password");
+
+    const submit = screen.getByRole("button", {
+      name: portal === "admin" ? /Sign in to dashboard/ : /Sign in to customer portal/,
+    });
+    await user.click(submit);
+
+    const loadingButton = await screen.findByRole("button", { name: /Signing in/ });
+    expect(loadingButton).toBeDisabled();
+    await user.click(loadingButton);
+    expect(fetch.mock.calls.filter(([url]) => String(url).includes("/login"))).toHaveLength(1);
+
+    finishLogin();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid email or password.");
+  });
+
+  it("shows meaningful backend login errors to the user", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("/api/health")) return jsonResponse({});
+      return jsonResponse({ message: "Too many login attempts. Please try again later." }, 429);
+    });
+
+    render(<App />);
+    await user.type(screen.getByLabelText("Email address"), "customer@example.com");
+    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.click(screen.getByRole("button", { name: /Sign in to customer portal/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Too many login attempts. Please try again later."
+    );
+  });
+
+  it.each([
+    ["admin", "sollapurevinay17@gmail.com", "/api/auth/login"],
+    ["customer", "vinayssollapure@gmail.com", "/api/customer-auth/login"],
+  ])("keeps the %s email confined to its own authentication route", async (portal, email, endpoint) => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("/api/health")) return jsonResponse({});
+      return jsonResponse({ message: "Invalid email or password" }, 401);
+    });
+
+    render(<App />);
+    if (portal === "admin") {
+      await user.click(screen.getByRole("button", { name: "Switch to Admin Portal" }));
+    }
+
+    await user.type(screen.getByLabelText("Email address"), email);
+    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.click(screen.getByRole("button", {
+      name: portal === "admin" ? /Sign in to dashboard/ : /Sign in to customer portal/,
+    }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid email or password.");
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining(endpoint),
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(fetch.mock.calls.filter(([url]) => String(url).includes("/login"))).toHaveLength(1);
+    expect(screen.queryByRole("heading", { name: "Dashboard" })).not.toBeInTheDocument();
+  });
+
+  it("uses the same login layout and card styling for both portals", async () => {
+    render(<App />);
+    const customerPage = screen.getByRole("main");
+    expect(customerPage).toHaveClass("login-page");
+    expect(customerPage.querySelector(".login-card")).toHaveClass("customer-login-card");
+    expect(customerPage.querySelector(".login-art")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Switch to Admin Portal" }));
+    const adminPage = screen.getByRole("main");
+    expect(adminPage).toHaveClass("login-page");
+    expect(adminPage.querySelector(".login-card")).toHaveClass("login-card");
+    expect(adminPage.querySelector(".login-art")).toBeInTheDocument();
+  });
+
+  it("shows Forgot Password actions in both portals without changing registration", async () => {
+    render(<App />);
+    const customerActions = screen.getByRole("button", {
+      name: "Create customer account",
+    }).parentElement;
+    expect(customerActions).toHaveClass("login-secondary-actions");
+    expect(customerActions).toContainElement(screen.getByRole("button", { name: "Forgot password" }));
+    await user.click(screen.getByRole("button", { name: "Forgot password" }));
+    expect(screen.getByRole("heading", { name: "Forgot Password" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Back to customer login" }));
+
+    await user.click(screen.getByRole("button", { name: "Switch to Admin Portal" }));
+    const adminCreateAccount = screen.getByRole("button", { name: "Create account" });
+    const adminActions = adminCreateAccount.parentElement;
+    expect(adminActions).toHaveClass("login-secondary-actions");
+    expect(adminActions).toContainElement(screen.getByRole("button", { name: "Forgot password" }));
+
+    await user.click(adminCreateAccount);
+    expect(screen.getByPlaceholderText("Full name")).toBeInTheDocument();
+  });
+
+  it.each([
+    {
+      portal: "customer",
+      email: "customer@example.com",
+      prefix: "customer-auth",
+    },
+    {
+      portal: "admin",
+      email: "admin@example.com",
+      prefix: "auth",
+    },
+  ])("completes the $portal forgot-password flow and signs in with the new password", async ({
+    portal,
+    email,
+    prefix,
+  }) => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options = {}) => {
+      const requestUrl = String(url);
+      const body = options.body ? JSON.parse(options.body) : {};
+      if (requestUrl.includes("/api/health")) return jsonResponse({});
+      if (requestUrl.includes(`/api/${prefix}/forgot-password`)) {
+        expect(body.email).toBe(email);
+        return jsonResponse({
+          status: "success",
+          message: "If the email matches an active account in this portal, a verification code will be sent.",
+        }, 202);
+      }
+      if (requestUrl.includes(`/api/${prefix}/verify-otp`)) {
+        expect(body).toEqual({ email, otp: "123456" });
+        return jsonResponse({ reset_token: "one-time-reset-authorization" });
+      }
+      if (requestUrl.includes(`/api/${prefix}/reset-password`)) {
+        expect(body).toEqual({
+          token: "one-time-reset-authorization",
+          password: "new-password-123",
+        });
+        return jsonResponse({ status: "success" });
+      }
+      if (requestUrl.includes(`/api/${prefix}/login`)) {
+        expect(body).toEqual({ email, password: "new-password-123" });
+        return jsonResponse({ access_token: `${portal}-access-token` });
+      }
+      if (requestUrl.includes("/api/customer-auth/appointments")) {
+        return jsonResponse({ appointments: [] });
+      }
+      if (requestUrl.includes("/api/customer-auth/queue-tokens")) {
+        return jsonResponse({ tokens: [] });
+      }
+      if (requestUrl.includes("/api/businesses")) {
+        return jsonResponse({ businesses: [] });
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    });
+
+    render(<App />);
+    if (portal === "admin") {
+      await user.click(screen.getByRole("button", { name: "Switch to Admin Portal" }));
+    }
+
+    const emailInput = screen.getByLabelText("Email address");
+    await user.type(emailInput, email);
+    await user.click(screen.getByRole("button", { name: "Forgot password" }));
+    await user.clear(screen.getByLabelText("Registered email address"));
+    await user.type(screen.getByLabelText("Registered email address"), email);
+    await user.click(screen.getByRole("button", { name: "Send OTP" }));
+
+    expect(await screen.findByText(/If the email matches an active account in this portal, a verification code will be sent/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Resend OTP in 60s/ })).toBeDisabled();
+    await user.type(screen.getByLabelText("Verification code"), "123456");
+    await user.click(screen.getByRole("button", { name: "Verify OTP" }));
+
+    await user.type(await screen.findByLabelText("New Password"), "new-password-123");
+    await user.type(screen.getByLabelText("Confirm Password"), "mismatch-123");
+    await user.click(screen.getByRole("button", { name: "Change your password" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The passwords do not match.");
+    expect(fetch.mock.calls.some(([url]) => String(url).includes(`/api/${prefix}/reset-password`))).toBe(false);
+
+    await user.clear(screen.getByLabelText("Confirm Password"));
+    await user.type(screen.getByLabelText("Confirm Password"), "new-password-123");
+    await user.click(screen.getByRole("button", { name: "Change your password" }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "Your password has been changed successfully! Please log in with your new password."
+    );
+    await user.click(screen.getByRole("button", { name: "OK" }));
+    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Password"), "new-password-123");
+    await user.click(screen.getByRole("button", {
+      name: portal === "admin" ? /Sign in to dashboard/ : /Sign in to customer portal/,
+    }));
+    if (portal === "admin") {
+      expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    } else {
+      expect(await screen.findByText(/You’re signed in/)).toBeInTheDocument();
+    }
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining(`/api/${prefix}/reset-password`),
+      expect.any(Object)
+    );
+  });
+
+  it("shows SMTP delivery configuration errors without claiming an OTP was sent", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("/api/health")) return jsonResponse({});
+      if (String(url).includes("/api/customer-auth/forgot-password")) {
+        return jsonResponse({
+          status: "error",
+          message: "Password reset email is not configured. Contact the system administrator.",
+        }, 503);
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    });
+
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Forgot password" }));
+    await user.type(screen.getByLabelText("Registered email address"), "customer@example.com");
+    await user.click(screen.getByRole("button", { name: "Send OTP" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Password reset email is not configured. Contact the system administrator."
+    );
+    expect(screen.queryByLabelText("Verification code")).not.toBeInTheDocument();
+  });
+
   it("switches to an independent admin portal, supports logout, and remembers the portal across refresh", async () => {
     localStorage.setItem("queueless_customer_token", "legacy-customer-token");
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options = {}) => {
