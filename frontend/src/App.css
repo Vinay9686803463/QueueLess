@@ -177,6 +177,16 @@ select {
   color: #43565e;
 }
 
+.btn-demo {
+  color: #7046b2;
+  background: #f3edfb;
+  border: 1px solid #e6daf7;
+}
+
+.btn-demo:hover:not(:disabled) {
+  background: #eae0f7;
+}
+
 .btn-purple {
   color: #fff;
   background: linear-gradient(135deg, #9873d0, #7952bb);
@@ -1197,7 +1207,7 @@ select {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 20px;
 }
@@ -1253,6 +1263,79 @@ select {
   grid-template-columns: minmax(0, 1.55fr) minmax(260px, .85fr);
   align-items: start;
   gap: 17px;
+}
+
+.dashboard-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin: 18px 0;
+  padding: 48px 20px;
+  border: 1px dashed #d4e0e3;
+  border-radius: 14px;
+  color: #85949a;
+  background: #fff;
+  text-align: center;
+}
+
+.dashboard-empty-state h2 {
+  margin: 3px 0 0;
+  color: #30464e;
+  font-size: 18px;
+}
+
+.dashboard-empty-state p {
+  max-width: 430px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.dashboard-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 12px 15px;
+  border: 1px solid #f0d7d7;
+  border-radius: 9px;
+  color: #a44949;
+  background: #fff7f7;
+  font-size: 12px;
+}
+
+.dashboard-error button {
+  padding: 6px 10px;
+  border: 1px solid #efcccc;
+  border-radius: 6px;
+  color: #a44949;
+  background: #fff;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.dashboard-sync-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: #76868c;
+  font-size: 10px;
+}
+
+.dashboard-loading-indicator {
+  width: 13px;
+  height: 13px;
+  border: 2px solid #d7e8e8;
+  border-top-color: #168f96;
+  border-radius: 50%;
+  animation: dashboard-spin .8s linear infinite;
+}
+
+@keyframes dashboard-spin {
+  to { transform: rotate(360deg); }
 }
 
 .dashboard-panel {
@@ -1351,6 +1434,44 @@ select {
 
 .queue-table td strong {
   color: #24454c;
+}
+
+.queue-position {
+  display: inline-grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  border-radius: 7px;
+  color: #167b80;
+  background: #e8f6f5;
+  font-weight: 800;
+}
+
+.queue-customer-name {
+  display: inline-block;
+  margin-right: 5px;
+  color: #40565e;
+  font-weight: 650;
+}
+
+.queue-service-duration {
+  display: block;
+  margin-top: 4px;
+  color: #9aa5aa;
+  font-size: 9px;
+}
+
+.demo-badge {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 3px 5px;
+  border-radius: 4px;
+  color: #7351ad;
+  background: #f3edfb;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .4px;
+  vertical-align: middle;
 }
 
 .status-badge {
@@ -1482,7 +1603,7 @@ select {
 .service-list li {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   padding: 12px 0;
   border-bottom: 1px solid #edf1f2;
   color: #52646b;
@@ -1500,6 +1621,42 @@ select {
   background: #1ba1a2;
 }
 
+.service-dot-inactive {
+  background: #b7c1c4;
+}
+
+.service-summary {
+  display: grid;
+  min-width: 80px;
+  flex: 1;
+  gap: 4px;
+}
+
+.service-summary strong {
+  color: #52646b;
+  font-size: 10px;
+}
+
+.service-summary small {
+  color: #9aa5aa;
+  font-size: 9px;
+  line-height: 1.4;
+  margin-left: 0;
+}
+
+.service-metrics {
+  display: grid;
+  gap: 4px;
+  text-align: right;
+}
+
+.service-metrics small {
+  color: #9aa5aa;
+  font-size: 9px;
+  white-space: nowrap;
+  margin-left: 0;
+}
+
 .service-list li small {
   margin-left: auto;
   color: #9aa5aa;
@@ -1508,6 +1665,7 @@ select {
 }
 
 .service-list li button {
+  flex: none;
   padding: 5px 7px;
   border: 1px solid #dfe9eb;
   border-radius: 5px;
@@ -1848,6 +2006,14 @@ select {
 
   .service-list li small {
     margin-left: 0;
+  }
+
+  .service-metrics {
+    text-align: left;
+  }
+
+  .queue-controls .btn {
+    flex: 1 1 145px;
   }
 
   .checkin-layout {

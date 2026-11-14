@@ -68,6 +68,9 @@ def get_database_url():
 
 class Config:
     ENV = os.getenv("FLASK_ENV", "development").lower()
+    QUEUELESS_ENABLE_DEMO_DATA = os.getenv(
+        "QUEUELESS_ENABLE_DEMO_DATA", "false"
+    ).lower() in ("true", "1", "yes")
     SECRET_KEY = os.getenv("SECRET_KEY")
 
     if not SECRET_KEY:

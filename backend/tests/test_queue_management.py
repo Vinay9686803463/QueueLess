@@ -16,12 +16,37 @@ def test_queue_management_routes_are_registered():
     app = create_app()
     rules = {rule.rule for rule in app.url_map.iter_rules()}
     assert "/api/businesses/<business_id>/queue" in rules
+    assert "/api/businesses/<business_id>/queue/demo" in rules
     assert "/api/businesses/<business_id>/queue/call-next" in rules
     assert "/api/businesses/<business_id>/queue/<token_id>/complete" in rules
     assert "/api/businesses/<business_id>/queue/<token_id>/skip" in rules
     assert "/api/businesses/<business_id>/queue/<token_id>/cancel" in rules
     assert "/api/businesses/<business_id>/queue/pause" in rules
     assert "/api/businesses/<business_id>/queue/resume" in rules
+
+
+def test_demo_data_guard_requires_explicit_local_development_opt_in(app):
+    from app.routes.queue import _demo_data_enabled
+
+    with app.app_context():
+        app.config.update(
+            ENV="development",
+            QUEUELESS_ENABLE_DEMO_DATA=False,
+            SQLALCHEMY_DATABASE_URI="postgresql+psycopg2://localhost/queueless",
+        )
+        assert not _demo_data_enabled()
+
+        app.config["QUEUELESS_ENABLE_DEMO_DATA"] = True
+        assert _demo_data_enabled()
+
+        app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql+psycopg2://db.example/queueless"
+        assert not _demo_data_enabled()
+
+        app.config.update(
+            ENV="production",
+            SQLALCHEMY_DATABASE_URI="postgresql+psycopg2://localhost/queueless",
+        )
+        assert not _demo_data_enabled()
 
 
 @pytest.fixture()
@@ -113,6 +138,78 @@ def test_get_queue(client, two_queue_entries):
     data = response.get_json()
     assert data["summary"]["waiting"] == 2
     assert len(data["waiting"]) == 2
+
+
+@pytest.mark.skipif(not RUN_INTEGRATION, reason="Set QUEUELESS_RUN_INTEGRATION_TESTS=1 to run Supabase integration tests")
+def test_demo_queue_seeding_is_idempotent_and_cleanup_preserves_real_entries(
+    client, app, business_with_service, monkeypatch
+):
+    from app.routes import queue as queue_routes
+
+    registered_user, business_id, service_id = business_with_service
+    headers = {"Authorization": f"Bearer {registered_user['token']}"}
+
+    real_entry = client.post(
+        "/api/public/walk-in",
+        json={
+            "business_id": business_id,
+            "service_id": service_id,
+            "customer_name": "Real Queue Customer",
+            "customer_phone": "555-0199",
+        },
+    )
+    assert real_entry.status_code == 201
+    real_token_id = real_entry.get_json()["queue_token"]["id"]
+    monkeypatch.setattr(queue_routes, "_demo_data_enabled", lambda: True)
+
+    first_seed = client.post(
+        f"/api/businesses/{business_id}/queue/demo",
+        headers=headers,
+    )
+    assert first_seed.status_code == 201
+    assert first_seed.get_json()["created"] == 12
+
+    second_seed = client.post(
+        f"/api/businesses/{business_id}/queue/demo",
+        headers=headers,
+    )
+    assert second_seed.status_code == 200
+    assert second_seed.get_json()["created"] == 0
+
+    queue = client.get(
+        f"/api/businesses/{business_id}/queue",
+        headers=headers,
+    )
+    assert queue.status_code == 200
+    data = queue.get_json()
+    demo_entries = [entry for entry in data["waiting"] if entry["is_demo"]]
+    real_entries = [entry for entry in data["waiting"] if not entry["is_demo"]]
+    assert len(demo_entries) == 12
+    assert len({entry["id"] for entry in demo_entries}) == 12
+    assert len({entry["tracking_code"] for entry in demo_entries}) == 12
+    assert all(entry["customer_name"].startswith("DEMO · ") for entry in demo_entries)
+    assert len(real_entries) == 1
+    assert real_entries[0]["id"] == real_token_id
+
+    removal = client.delete(
+        f"/api/businesses/{business_id}/queue/demo",
+        headers=headers,
+    )
+    assert removal.status_code == 200
+    assert removal.get_json()["removed"] == 12
+
+    with app.app_context():
+        from app.extensions import db
+
+        remaining_ids = db.session.execute(
+            text("""
+                SELECT id::text
+                FROM queue_tokens
+                WHERE business_id = :business_id
+            """),
+            {"business_id": business_id},
+        ).scalars().all()
+    assert remaining_ids == [real_token_id]
 
 
 @pytest.mark.skipif(not RUN_INTEGRATION, reason="Set QUEUELESS_RUN_INTEGRATION_TESTS=1 to run Supabase integration tests")
