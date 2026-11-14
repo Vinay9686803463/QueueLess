@@ -2,7 +2,7 @@ import uuid as uuid_lib
 from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, request, jsonify, g, current_app
-from sqlalchemy import text
+from sqlalchemy import text, bindparam
 
 from ..extensions import db
 from .auth import token_required
@@ -459,14 +459,19 @@ def list_appointments():
 
     query = """
         SELECT
-    """ + get_appointment_columns() + """
+    """ + get_appointment_columns() + """,
+            (SELECT s.service_name FROM services s WHERE s.id = appointments.service_id)
+                AS service_name,
+            (SELECT b.business_name FROM businesses b WHERE b.id = appointments.business_id)
+                AS business_name
         FROM appointments
-        WHERE business_id::text IN :business_ids
+        WHERE appointments.business_id::text IN :business_ids
     """
 
     try:
         appointments = db.session.execute(
-            text(query), params
+            text(query).bindparams(bindparam("business_ids", expanding=True)),
+            params
         ).mappings().all()
 
         return jsonify({

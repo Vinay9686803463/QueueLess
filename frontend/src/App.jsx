@@ -213,6 +213,13 @@ function StatCard({ label, value, detail, icon }) {
   );
 }
 
+function getQueueRows(data) {
+  if (Array.isArray(data.queue)) return data.queue;
+  return ["called", "waiting", "completed", "skipped", "cancelled"]
+    .flatMap((key) => Array.isArray(data[key]) ? data[key] : [])
+    .sort((left, right) => Number(left.token_number) - Number(right.token_number));
+}
+
 export default function App() {
   const [role, setRole] = useState(
     () => sessionStorage.getItem("queueless_portal") === "admin" ? "admin" : "customer"
@@ -221,13 +228,16 @@ export default function App() {
   const [notice, setNotice] = useState("");
   const [token, setToken] = useState("");
   const [customerToken, setCustomerToken] = useState("");
+  const [customerProfile, setCustomerProfile] = useState(null);
   const [customerAppointments, setCustomerAppointments] = useState([]);
   const [customerTokens, setCustomerTokens] = useState([]);
+  const [currentTime, setCurrentTime] = useState(0);
 
   const [businessSlug, setBusinessSlug] = useState("demo-clinic");
   const [business, setBusiness] = useState(null);
   const [publicServices, setPublicServices] = useState([]);
   const [adminServices, setAdminServices] = useState([]);
+  const [adminAppointments, setAdminAppointments] = useState([]);
   const [queue, setQueue] = useState([]);
   const [queuePaused, setQueuePaused] = useState(false);
   const [booking, setBooking] = useState(null);
@@ -272,6 +282,13 @@ export default function App() {
 
   const [businesses, setBusinesses] = useState([]);
   const [selectedBusinessId, setSelectedBusinessId] = useState("");
+  const [serviceForm, setServiceForm] = useState({
+    service_name: "",
+    description: "",
+    duration_minutes: "15",
+    price: "0",
+  });
+  const [editingServiceId, setEditingServiceId] = useState("");
 
   useEffect(() => {
     localStorage.removeItem("queueless_token");
@@ -286,6 +303,13 @@ export default function App() {
       })
       .then(() => setBackendStatus("online"))
       .catch(() => setBackendStatus("offline"));
+  }, []);
+
+  useEffect(() => {
+    const updateTime = () => setCurrentTime(Date.now());
+    updateTime();
+    const timer = window.setInterval(updateTime, 60000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const notify = (message) => {
@@ -508,6 +532,9 @@ export default function App() {
       }
 
       notify("Your request has been submitted");
+      if (customerToken) {
+        await loadCustomerAccount(customerToken);
+      }
     } catch (err) {
       notify(err.message);
     }
@@ -581,6 +608,14 @@ export default function App() {
     setCustomerTokens(queueTokens.tokens || []);
   };
 
+  useEffect(() => {
+    if (!customerToken) return undefined;
+    const timer = window.setInterval(() => {
+      loadCustomerAccount(customerToken).catch((err) => notify(err.message));
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [customerToken]);
+
   const customerLogin = async (e) => {
     e.preventDefault();
     if (customerLoginInFlight.current) return;
@@ -597,6 +632,9 @@ export default function App() {
       if (!data.access_token) {
         throw new Error("Unable to sign in right now. Please try again.");
       }
+      setCustomerProfile(data.customer || null);
+      setCustomerName(data.customer?.full_name || "");
+      setCustomerPhone(data.customer?.phone || "");
       setCustomerToken(data.access_token);
       notify("Customer login successful");
       try {
@@ -617,6 +655,7 @@ export default function App() {
     e.preventDefault();
     try {
       const data = await api("/customer-auth/register", { method: "POST", body: JSON.stringify({ full_name: customerName, email: customerEmail, phone: customerPhone, password: customerPassword }) });
+      setCustomerProfile(data.customer || null);
       setCustomerToken(data.access_token);
       notify("Customer registration successful");
       try {
@@ -631,8 +670,13 @@ export default function App() {
 
   const customerLogout = () => {
     setCustomerToken("");
+    setCustomerProfile(null);
     setCustomerAppointments([]);
     setCustomerTokens([]);
+    setCustomerName("");
+    setCustomerPhone("");
+    setCustomerEmail("");
+    setCustomerPassword("");
     notify("You have been logged out");
   };
 
@@ -642,6 +686,14 @@ export default function App() {
     setSelectedBusinessId("");
     setQueue([]);
     setAdminServices([]);
+    setAdminAppointments([]);
+    setServiceForm({
+      service_name: "",
+      description: "",
+      duration_minutes: "15",
+      price: "0",
+    });
+    setEditingServiceId("");
     notify("You have been logged out");
   };
 
@@ -664,14 +716,20 @@ export default function App() {
     if (!businessId) return;
 
     try {
-      const [svc, q] = await Promise.all([
+      const [svc, q, appointments] = await Promise.all([
         api(`/businesses/${businessId}/services`, {}, authToken),
         api(`/businesses/${businessId}/queue`, {}, authToken),
+        api("/appointments", {}, authToken),
       ]);
 
       setAdminServices(svc.services || []);
-      setQueue(q.queue || q.waiting || []);
+      setQueue(getQueueRows(q));
       setQueuePaused(q.queue_paused || false);
+      setAdminAppointments(
+        (appointments.appointments || []).filter(
+          (appointment) => String(appointment.business_id) === String(businessId)
+        )
+      );
     } catch (err) {
       notify(err.message);
     }
@@ -689,6 +747,16 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBusinessId, token]);
 
+  useEffect(() => {
+    if (!selectedBusinessId || !token) return undefined;
+    const timer = window.setInterval(
+      () => loadBusinessData(selectedBusinessId),
+      15000
+    );
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBusinessId, token]);
+
   const loadQueue = async () => {
     if (!selectedBusinessId) return;
 
@@ -699,8 +767,14 @@ export default function App() {
         token
       );
 
-      setQueue(data.queue || data.waiting || []);
+      setQueue(getQueueRows(data));
       setQueuePaused(data.queue_paused || false);
+      const appointments = await api("/appointments", {}, token);
+      setAdminAppointments(
+        (appointments.appointments || []).filter(
+          (appointment) => String(appointment.business_id) === String(selectedBusinessId)
+        )
+      );
     } catch (err) {
       notify(err.message);
     }
@@ -774,6 +848,81 @@ export default function App() {
     }
   };
 
+  const cancelAdminAppointment = async (appointmentId) => {
+    try {
+      await api(`/appointments/${appointmentId}`, { method: "DELETE" }, token);
+      await loadBusinessData(selectedBusinessId);
+      notify("Appointment cancelled");
+    } catch (err) {
+      notify(err.message);
+    }
+  };
+
+  const saveService = async (event) => {
+    event.preventDefault();
+    if (!selectedBusinessId) return;
+
+    const collectionPath = `/businesses/${selectedBusinessId}/services`;
+    const payload = {
+      service_name: serviceForm.service_name,
+      description: serviceForm.description,
+      duration_minutes: Number(serviceForm.duration_minutes),
+      price: Number(serviceForm.price),
+    };
+    try {
+      await api(
+        editingServiceId ? `${collectionPath}/${editingServiceId}` : collectionPath,
+        {
+          method: editingServiceId ? "PUT" : "POST",
+          body: JSON.stringify(payload),
+        },
+        token
+      );
+      setServiceForm({
+        service_name: "",
+        description: "",
+        duration_minutes: "15",
+        price: "0",
+      });
+      setEditingServiceId("");
+      await loadBusinessData(selectedBusinessId);
+      notify(editingServiceId ? "Service updated" : "Service created");
+    } catch (err) {
+      notify(err.message);
+    }
+  };
+
+  const toggleServiceActive = async (service) => {
+    try {
+      await api(
+        `/businesses/${selectedBusinessId}/services/${service.id}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ is_active: !service.is_active }),
+        },
+        token
+      );
+      await loadBusinessData(selectedBusinessId);
+      notify(service.is_active ? "Service deactivated" : "Service activated");
+    } catch (err) {
+      notify(err.message);
+    }
+  };
+
+  const cancelCustomerAppointment = async (appointmentId) => {
+    try {
+      await api(
+        `/customer-auth/appointments/${appointmentId}`,
+        { method: "DELETE" },
+        customerToken
+      );
+      await loadCustomerAccount(customerToken);
+      notify("Appointment cancelled");
+    } catch (err) {
+      notify(err.message);
+    }
+  };
+
   const selectedBusiness = businesses.find(
     (item) => String(item.id) === String(selectedBusinessId)
   );
@@ -796,6 +945,45 @@ export default function App() {
         )
       ).length,
     [queue]
+  );
+  const waitingQueue = useMemo(
+    () => queue.filter((item) => ["waiting", "pending"].includes(String(item.status).toLowerCase())),
+    [queue]
+  );
+  const activeQueue = useMemo(
+    () => queue.filter((item) => ["called", "serving", "in_progress"].includes(String(item.status).toLowerCase())),
+    [queue]
+  );
+  const customerUpcomingAppointments = useMemo(
+    () => customerAppointments.filter((item) =>
+      ["booked", "confirmed"].includes(String(item.status).toLowerCase()) &&
+      new Date(item.scheduled_at).getTime() >= currentTime
+    ),
+    [customerAppointments, currentTime]
+  );
+  const customerAppointmentHistory = useMemo(
+    () => customerAppointments.filter((item) => !customerUpcomingAppointments.includes(item)),
+    [customerAppointments, customerUpcomingAppointments]
+  );
+  const recentActivity = useMemo(
+    () => [
+      ...queue.map((item) => ({
+        id: `queue-${item.id}`,
+        title: `Token #${item.token_number} ${item.status}`,
+        detail: item.customer_name || "Queue customer",
+        time: item.updated_at || item.joined_at || item.created_at,
+      })),
+      ...adminAppointments.map((item) => ({
+        id: `appointment-${item.id}`,
+        title: `${item.service_name || "Appointment"} · ${item.status}`,
+        detail: item.customer_name || "Customer",
+        time: item.updated_at || item.created_at || item.scheduled_at,
+      })),
+    ]
+      .filter((item) => item.time)
+      .sort((left, right) => new Date(right.time).getTime() - new Date(left.time).getTime())
+      .slice(0, 8),
+    [adminAppointments, queue]
   );
 
   return (
@@ -1096,34 +1284,64 @@ export default function App() {
 
             <div className="customer-account-panel">
               <span className="eyebrow purple-eyebrow">CUSTOMER ACCOUNT</span>
-              <h2>Welcome</h2>
+              <h2>You’re signed in</h2>
               <p className="customer-account-description">
                 Keep track of your visits, appointments and queue tokens.
               </p>
               <section className="customer-account" aria-labelledby="customer-account-title">
                 <h3 id="customer-account-title">Customer Account</h3>
-                <div className="customer-account-summary">
-                  <p>You’re signed in. Your appointments and queue tokens are below.</p>
-                  <div className="customer-account-records">
-                    <div>
-                      <h3>My appointments</h3>
-                      {customerAppointments.length ? customerAppointments.map((appointment) => (
-                        <p key={appointment.id}>
-                          {appointment.service_name || "Appointment"} · {appointment.status} ·{" "}
-                          {appointment.scheduled_at}
-                        </p>
-                      )) : <p>No appointments yet.</p>}
-                    </div>
-                    <div>
-                      <h3>My queue tokens</h3>
-                      {customerTokens.length ? customerTokens.map((queueToken) => (
-                        <p key={queueToken.id}>
-                          Token #{queueToken.token_number} · {queueToken.status} ·{" "}
-                          {queueToken.ahead} ahead
-                        </p>
-                      )) : <p>No queue tokens yet.</p>}
-                    </div>
-                  </div>
+                <div className="customer-profile" aria-label="Your profile">
+                  <strong>{customerProfile?.full_name || customerName}</strong>
+                  <span>{customerProfile?.email || customerEmail}</span>
+                  <span>{customerProfile?.phone || customerPhone || "Phone not provided"}</span>
+                </div>
+                <div className="customer-dashboard-records">
+                  <section className="customer-record-panel" aria-labelledby="upcoming-title">
+                    <h3 id="upcoming-title">Upcoming appointments</h3>
+                    {customerUpcomingAppointments.length ? customerUpcomingAppointments.map((appointment) => (
+                      <article className="customer-record" key={appointment.id}>
+                        <div>
+                          <strong>{appointment.service_name || "Appointment"} · {appointment.status}</strong>
+                          <span>{appointment.business_name || "QueueLess business"}</span>
+                          <span>{new Date(appointment.scheduled_at).toLocaleString()}</span>
+                        </div>
+                        {["booked", "confirmed"].includes(String(appointment.status).toLowerCase()) && (
+                          <button
+                            className="customer-cancel-button"
+                            type="button"
+                            onClick={() => cancelCustomerAppointment(appointment.id)}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </article>
+                    )) : <p>No upcoming appointments.</p>}
+                  </section>
+                  <section className="customer-record-panel" aria-labelledby="history-title">
+                    <h3 id="history-title">Appointment history</h3>
+                    {customerAppointmentHistory.length ? customerAppointmentHistory.map((appointment) => (
+                      <article className="customer-record" key={appointment.id}>
+                        <div>
+                          <strong>{appointment.service_name || "Appointment"}</strong>
+                          <span>{appointment.business_name || "QueueLess business"}</span>
+                          <span>{new Date(appointment.scheduled_at).toLocaleString()}</span>
+                          <small className="status-badge">{appointment.status}</small>
+                        </div>
+                      </article>
+                    )) : <p>No appointment history yet.</p>}
+                  </section>
+                  <section className="customer-record-panel customer-live-queue" aria-labelledby="tokens-title">
+                    <h3 id="tokens-title">Queue tokens · live status</h3>
+                    {customerTokens.length ? customerTokens.map((queueToken) => (
+                      <article className="customer-record" key={queueToken.id}>
+                        <div>
+                          <strong>Token #{queueToken.token_number} · {queueToken.status} · {queueToken.ahead} ahead</strong>
+                          <span>{queueToken.business_name || "QueueLess business"} · {queueToken.service_name || "Service"}</span>
+                          <small>Estimated wait: {queueToken.estimated_wait_minutes ?? "—"} min</small>
+                        </div>
+                      </article>
+                    )) : <p>No queue tokens yet.</p>}
+                  </section>
                 </div>
               </section>
             </div>
@@ -1238,6 +1456,7 @@ export default function App() {
                     placeholder="Enter your full name"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
+                    readOnly={Boolean(customerToken)}
                     required
                   />
                 </div>
@@ -1251,6 +1470,7 @@ export default function App() {
                       placeholder="Phone number"
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
+                      readOnly={Boolean(customerToken && customerProfile?.phone)}
                       required
                     />
                   </div>
@@ -1264,6 +1484,7 @@ export default function App() {
                       placeholder="Email (optional)"
                       value={customerEmail}
                       onChange={(e) => setCustomerEmail(e.target.value)}
+                      readOnly={Boolean(customerToken)}
                     />
                   </div>
                 </div>
@@ -1599,13 +1820,19 @@ export default function App() {
 
             <nav className="sidebar-nav">
               <a className="active" href="#overview">
-                <Icon>▦</Icon>Dashboard
+                <Icon>▦</Icon>Queue Overview
               </a>
               <a href="#queue">
-                <Icon>☷</Icon>Queues
+                <Icon>☷</Icon>Waiting List
               </a>
-              <a href="#queue">
-                <Icon>▣</Icon>Appointments
+              <a href="#digital-queue">
+                <Icon>▤</Icon>Digital Queue
+              </a>
+              <a href="#schedule">
+                <Icon>▣</Icon>Schedule
+              </a>
+              <a href="#activity">
+                <Icon>◷</Icon>Real-Time Activity
               </a>
               <a href="#services">
                 <Icon>◈</Icon>Services
@@ -1678,7 +1905,7 @@ export default function App() {
               <StatCard
                 label="Total queue entries"
                 value={queue.length}
-                detail="Currently loaded queue"
+                detail="Today's queue records"
                 icon="▤"
               />
               <StatCard
@@ -1764,8 +1991,8 @@ export default function App() {
                     </thead>
 
                     <tbody>
-                      {queue.length ? (
-                        queue.map((q) => (
+                      {waitingQueue.length ? (
+                        waitingQueue.map((q) => (
                           <tr key={q.id}>
                             <td>
                               <strong>#{q.token_number}</strong>
@@ -1782,13 +2009,6 @@ export default function App() {
                             </td>
                             <td>
                               <div className="row-actions">
-                                <button
-                                  onClick={() =>
-                                    queueAction(q.id, "complete")
-                                  }
-                                >
-                                  Complete
-                                </button>
                                 <button
                                   onClick={() =>
                                     queueAction(q.id, "skip")
@@ -1877,19 +2097,126 @@ export default function App() {
                 >
                   <div className="panel-heading">
                     <div>
-                      <h2>Available services</h2>
-                      <p>Services configured for this business</p>
+                      <h2>Service management</h2>
+                      <p>Create, update, and activate business services</p>
                     </div>
                     <span className="panel-icon">◈</span>
                   </div>
+
+                  <form className="service-editor" onSubmit={saveService}>
+                    <label htmlFor="service-name">Service name</label>
+                    <input
+                      id="service-name"
+                      className="input"
+                      value={serviceForm.service_name}
+                      onChange={(event) => setServiceForm((form) => ({
+                        ...form,
+                        service_name: event.target.value,
+                      }))}
+                      maxLength={120}
+                      required
+                    />
+                    <label htmlFor="service-description">Description</label>
+                    <input
+                      id="service-description"
+                      className="input"
+                      value={serviceForm.description}
+                      onChange={(event) => setServiceForm((form) => ({
+                        ...form,
+                        description: event.target.value,
+                      }))}
+                    />
+                    <div className="service-editor-fields">
+                      <div>
+                        <label htmlFor="service-duration">Duration (min)</label>
+                        <input
+                          id="service-duration"
+                          className="input"
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={serviceForm.duration_minutes}
+                          onChange={(event) => setServiceForm((form) => ({
+                            ...form,
+                            duration_minutes: event.target.value,
+                          }))}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="service-price">Price</label>
+                        <input
+                          id="service-price"
+                          className="input"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={serviceForm.price}
+                          onChange={(event) => setServiceForm((form) => ({
+                            ...form,
+                            price: event.target.value,
+                          }))}
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="service-editor-actions">
+                      <button
+                        className="btn btn-teal"
+                        type="submit"
+                        disabled={!selectedBusinessId}
+                      >
+                        {editingServiceId ? "Save service" : "Add service"}
+                      </button>
+                      {editingServiceId && (
+                        <button
+                          className="btn btn-outline"
+                          type="button"
+                          onClick={() => {
+                            setEditingServiceId("");
+                            setServiceForm({
+                              service_name: "",
+                              description: "",
+                              duration_minutes: "15",
+                              price: "0",
+                            });
+                          }}
+                        >
+                          Stop editing
+                        </button>
+                      )}
+                    </div>
+                  </form>
 
                   {adminServices.length ? (
                     <ul className="service-list">
                       {adminServices.map((s) => (
                         <li key={s.id}>
                           <span className="service-dot" />
-                          <span>{s.service_name}</span>
-                          <small>{s.duration_minutes} min</small>
+                          <span className={s.is_active ? "" : "service-inactive"}>
+                            {s.service_name}
+                          </span>
+                          <small>{s.duration_minutes} min · {s.is_active ? "Active" : "Inactive"}</small>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingServiceId(s.id);
+                              setServiceForm({
+                                service_name: s.service_name,
+                                description: s.description || "",
+                                duration_minutes: String(s.duration_minutes),
+                                price: String(s.price ?? 0),
+                              });
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleServiceActive(s)}
+                          >
+                            {s.is_active ? "Deactivate" : "Activate"}
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -1900,6 +2227,97 @@ export default function App() {
                   )}
                 </div>
               </aside>
+            </section>
+
+            <section className="admin-lower-grid">
+              <div className="dashboard-panel" id="digital-queue">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Digital Queue</h2>
+                    <p>Customers currently called or being served</p>
+                  </div>
+                  <span className="panel-icon">{activeQueue.length}</span>
+                </div>
+                {activeQueue.length ? activeQueue.map((item) => (
+                  <article className="admin-record" key={item.id}>
+                    <div>
+                      <strong>Token #{item.token_number} · {item.customer_name || "Customer"}</strong>
+                      <span>{item.service_name || "Service"} · {item.status}</span>
+                    </div>
+                    <div className="row-actions">
+                      <button type="button" onClick={() => queueAction(item.id, "complete")}>
+                        Complete
+                      </button>
+                      <button type="button" onClick={() => queueAction(item.id, "skip")}>
+                        Skip
+                      </button>
+                      <button
+                        type="button"
+                        className="danger-action"
+                        onClick={() => queueAction(item.id, "cancel")}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </article>
+                )) : <p className="muted-empty">No customers are currently being served.</p>}
+              </div>
+
+              <div className="dashboard-panel" id="schedule">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Schedule</h2>
+                    <p>{selectedBusiness?.business_name || "Appointments for this business"}</p>
+                  </div>
+                  <span className="panel-icon">{adminAppointments.length}</span>
+                </div>
+                {adminAppointments.length ? (
+                  <div className="admin-schedule-list">
+                    {adminAppointments
+                      .slice()
+                      .sort((left, right) => new Date(left.scheduled_at) - new Date(right.scheduled_at))
+                      .map((appointment) => (
+                        <article className="admin-record" key={appointment.id}>
+                          <div>
+                            <strong>{appointment.service_name || "Appointment"} · {appointment.customer_name}</strong>
+                            <span>{new Date(appointment.scheduled_at).toLocaleString()}</span>
+                            <span>{appointment.customer_phone} · {appointment.status}</span>
+                          </div>
+                          {["booked", "confirmed"].includes(String(appointment.status).toLowerCase()) && (
+                            <button
+                              className="customer-cancel-button"
+                              type="button"
+                              onClick={() => cancelAdminAppointment(appointment.id)}
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </article>
+                      ))}
+                  </div>
+                ) : <p className="muted-empty">No appointments are scheduled for this business.</p>}
+              </div>
+
+              <div className="dashboard-panel" id="activity">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Real-Time Activity</h2>
+                    <p>Queue and appointment changes · refreshed every 15 seconds</p>
+                  </div>
+                  <button className="btn btn-outline" type="button" onClick={loadQueue}>
+                    Refresh
+                  </button>
+                </div>
+                {recentActivity.length ? recentActivity.map((item) => (
+                  <article className="admin-record activity-record" key={item.id}>
+                    <div>
+                      <strong>{item.title}</strong>
+                      <span>{item.detail}</span>
+                    </div>
+                    <time dateTime={item.time}>{new Date(item.time).toLocaleString()}</time>
+                  </article>
+                )) : <p className="muted-empty">No queue or appointment activity yet.</p>}
+              </div>
             </section>
 
             <footer className="admin-footer">

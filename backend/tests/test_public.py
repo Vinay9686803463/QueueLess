@@ -126,6 +126,75 @@ def test_public_booking_success(client, public_business):
 
 
 @pytest.mark.skipif(not RUN_INTEGRATION, reason="Set QUEUELESS_RUN_INTEGRATION_TESTS=1 to run Supabase integration tests")
+def test_authenticated_customer_booking_uses_account_identity(client, app, public_business):
+    admin, business_id, service_id, _ = public_business
+    email = f"customer-test-{uuid.uuid4()}@example.com"
+    response = client.post(
+        "/api/customer-auth/register",
+        json={
+            "full_name": "QueueLess Account Customer",
+            "email": email,
+            "phone": "555-0123",
+            "password": "TestPassword123!",
+        },
+    )
+    assert response.status_code == 201
+    customer = response.get_json()["customer"]
+    customer_token = response.get_json()["access_token"]
+
+    try:
+        scheduled_at = (
+            datetime.now(timezone.utc) + timedelta(days=1)
+        ).replace(hour=10, minute=0, second=0, microsecond=0)
+        booking = client.post(
+            "/api/public/bookings",
+            headers={"Authorization": f"Bearer {customer_token}"},
+            json={
+                "business_id": business_id,
+                "service_id": service_id,
+                "customer_name": "Unrelated Submitted Name",
+                "customer_phone": "555-9999",
+                "customer_email": "unrelated@example.com",
+                "scheduled_at": scheduled_at.isoformat(),
+            },
+        )
+        assert booking.status_code == 201
+        appointment = booking.get_json()["appointment"]
+        assert appointment["customer_id"] == customer["id"]
+        assert appointment["customer_name"] == customer["full_name"]
+        assert appointment["customer_phone"] == customer["phone"]
+        assert appointment["customer_email"] == customer["email"]
+
+        owned_appointments = client.get(
+            "/api/customer-auth/appointments",
+            headers={"Authorization": f"Bearer {customer_token}"},
+        )
+        assert owned_appointments.status_code == 200
+        assert [item["id"] for item in owned_appointments.get_json()["appointments"]] == [
+            appointment["id"]
+        ]
+
+        cross_portal = client.get(
+            "/api/customer-auth/appointments",
+            headers={"Authorization": f"Bearer {admin['token']}"},
+        )
+        assert cross_portal.status_code == 401
+    finally:
+        with app.app_context():
+            from app.extensions import db
+
+            db.session.execute(
+                text("DELETE FROM appointments WHERE customer_id = :customer_id"),
+                {"customer_id": customer["id"]},
+            )
+            db.session.execute(
+                text("DELETE FROM customers WHERE id = :customer_id"),
+                {"customer_id": customer["id"]},
+            )
+            db.session.commit()
+
+
+@pytest.mark.skipif(not RUN_INTEGRATION, reason="Set QUEUELESS_RUN_INTEGRATION_TESTS=1 to run Supabase integration tests")
 def test_public_booking_missing_fields(client, public_business):
     _, business_id, service_id, _ = public_business
     response = client.post(
