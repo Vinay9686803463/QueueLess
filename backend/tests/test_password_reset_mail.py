@@ -1,3 +1,4 @@
+import pytest
 from flask import Flask
 
 from app.utils import password_reset
@@ -37,7 +38,13 @@ def test_gmail_mail_configuration_requires_credentials_and_matching_sender():
         assert not password_reset._email_is_configured()
 
 
-def test_gmail_smtp_sender_uses_tls_auth_and_sends_message(monkeypatch):
+@pytest.mark.parametrize(
+    ("account_type", "expected_label"),
+    [("admin", "Admin"), ("customer", "Customer")],
+)
+def test_gmail_smtp_sender_uses_tls_auth_and_sends_message(
+    monkeypatch, account_type, expected_label
+):
     app = Flask(__name__)
     _mail_config(app)
     calls = []
@@ -77,9 +84,9 @@ def test_gmail_smtp_sender_uses_tls_auth_and_sends_message(monkeypatch):
 
     with app.app_context():
         password_reset._send_otp_email(
-            "customer@example.com",
+            f"{account_type}@example.com",
             "123456",
-            "customer",
+            account_type,
         )
 
     assert calls[0] == ("connect", "smtp.gmail.com", 587, 10)
@@ -87,12 +94,14 @@ def test_gmail_smtp_sender_uses_tls_auth_and_sends_message(monkeypatch):
     assert calls[2] == ("login", "sender@example.com", "test-app-password")
     assert calls[3][0:3] == (
         "send",
-        "customer@example.com",
+        f"{account_type}@example.com",
         "sender@example.com",
     )
+    assert "QueueLess" in calls[3][3]
     assert "123456" in calls[3][3]
+    assert "Never share this code" in calls[3][3]
     assert "QUEUELESS" in calls[3][4]
-    assert "Account type: <strong>Customer</strong>" in calls[3][4]
+    assert f"Account type: <strong>{expected_label}</strong>" in calls[3][4]
     assert "expires in 5 minutes" in calls[3][4]
     assert "Never share this code" in calls[3][4]
 
