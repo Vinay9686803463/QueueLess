@@ -1,4 +1,5 @@
 import jwt
+import uuid as uuid_lib
 from datetime import datetime, timedelta, timezone
 from flask import Blueprint, request, jsonify, g, current_app
 from sqlalchemy import text
@@ -40,6 +41,12 @@ def customer_token_required(func):
             payload = jwt.decode(token, _jwt_secret(), algorithms=["HS256"])
             if payload.get("role") != "customer":
                 return jsonify({"status": "error", "message": "Invalid token."}), 401
+            customer = db.session.execute(
+                text("SELECT id FROM customers WHERE id = :id AND is_active = TRUE"),
+                {"id": payload["sub"]},
+            ).first()
+            if not customer:
+                return jsonify({"status": "error", "message": "Customer account not found or inactive."}), 401
             g.customer_id = payload["sub"]
         except Exception:
             return jsonify({"status": "error", "message": "Invalid or expired token."}), 401
@@ -168,15 +175,90 @@ def me():
 def my_appointments():
     rows = db.session.execute(
         text("""
-            SELECT a.id::text AS id, a.customer_name, a.scheduled_at, a.status, s.service_name
+            SELECT a.id::text AS id,
+                   a.business_id::text AS business_id,
+                   a.customer_name,
+                   a.customer_email,
+                   a.scheduled_at,
+                   a.status,
+                   a.created_at,
+                   s.service_name,
+                   b.business_name
             FROM appointments a
             LEFT JOIN services s ON s.id = a.service_id
+            LEFT JOIN businesses b ON b.id = a.business_id
             WHERE a.customer_id = :customer_id
             ORDER BY a.scheduled_at DESC
         """),
         {"customer_id": g.customer_id},
     ).mappings().all()
-    return jsonify({"status": "success", "appointments": [dict(r) for r in rows]}), 200
+    appointments = []
+    for row in rows:
+        appointment = dict(row)
+        for field in ("scheduled_at", "created_at"):
+            if appointment[field] is not None:
+                appointment[field] = appointment[field].isoformat()
+        appointments.append(appointment)
+    return jsonify({"status": "success", "appointments": appointments}), 200
+
+
+@customer_auth_bp.route("/appointments/<appointment_id>", methods=["DELETE"])
+@customer_token_required
+def cancel_my_appointment(appointment_id):
+    try:
+        uuid_lib.UUID(str(appointment_id))
+    except (ValueError, AttributeError, TypeError):
+        return jsonify({"status": "error", "message": "Appointment not found."}), 404
+
+    try:
+        appointment = db.session.execute(
+            text("""
+                SELECT id::text AS id, status
+                FROM appointments
+                WHERE id = :appointment_id
+                  AND customer_id = :customer_id
+                FOR UPDATE
+            """),
+            {
+                "appointment_id": appointment_id,
+                "customer_id": g.customer_id,
+            },
+        ).mappings().first()
+        if not appointment:
+            db.session.rollback()
+            return jsonify({"status": "error", "message": "Appointment not found."}), 404
+        if appointment["status"] not in ("booked", "confirmed"):
+            db.session.rollback()
+            return jsonify({
+                "status": "error",
+                "message": "This appointment can no longer be cancelled.",
+            }), 409
+
+        db.session.execute(
+            text("""
+                UPDATE appointments
+                SET status = 'cancelled',
+                    updated_at = NOW()
+                WHERE id = :appointment_id
+                  AND customer_id = :customer_id
+            """),
+            {
+                "appointment_id": appointment_id,
+                "customer_id": g.customer_id,
+            },
+        )
+        db.session.commit()
+        return jsonify({
+            "status": "success",
+            "message": "Appointment cancelled successfully.",
+        }), 200
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Customer appointment cancellation failed")
+        return jsonify({
+            "status": "error",
+            "message": "Appointment cancellation failed. Please try again.",
+        }), 500
 
 
 @customer_auth_bp.route("/queue-tokens", methods=["GET"])
@@ -184,13 +266,37 @@ def my_appointments():
 def my_tokens():
     rows = db.session.execute(
         text("""
-            SELECT qt.id::text AS id, qt.token_number, qt.status, qt.tracking_code, qt.created_at, s.service_name,
-                   (SELECT COUNT(*) FROM queue_tokens q2 WHERE q2.business_id = qt.business_id AND q2.queue_date = qt.queue_date AND q2.status = 'waiting' AND q2.token_number < qt.token_number) AS ahead
+            SELECT qt.id::text AS id,
+                   qt.business_id::text AS business_id,
+                   qt.token_number,
+                   qt.status,
+                   qt.tracking_code,
+                   qt.queue_date,
+                   qt.created_at,
+                   s.service_name,
+                   b.business_name,
+                   s.duration_minutes,
+                   (SELECT COUNT(*) FROM queue_tokens q2
+                    WHERE q2.business_id = qt.business_id
+                      AND q2.queue_date = qt.queue_date
+                      AND q2.status = 'waiting'
+                      AND q2.token_number < qt.token_number) AS ahead
             FROM queue_tokens qt
             LEFT JOIN services s ON s.id = qt.service_id
+            LEFT JOIN businesses b ON b.id = qt.business_id
             WHERE qt.customer_id = :customer_id
             ORDER BY qt.created_at DESC
         """),
         {"customer_id": g.customer_id},
     ).mappings().all()
-    return jsonify({"status": "success", "tokens": [dict(r) for r in rows]}), 200
+    tokens = []
+    for row in rows:
+        queue_token = dict(row)
+        queue_token["estimated_wait_minutes"] = (
+            queue_token["ahead"] * (queue_token["duration_minutes"] or 0)
+        )
+        for field in ("created_at", "queue_date"):
+            if queue_token[field] is not None:
+                queue_token[field] = queue_token[field].isoformat()
+        tokens.append(queue_token)
+    return jsonify({"status": "success", "tokens": tokens}), 200

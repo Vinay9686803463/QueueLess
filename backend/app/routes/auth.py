@@ -66,6 +66,12 @@ def token_required(func):
                 algorithms=["HS256"]
             )
 
+            if payload.get("role") == "customer":
+                return jsonify({
+                    "status": "error",
+                    "message": "Invalid authentication token"
+                }), 401
+
             user = db.session.execute(
                 text("""
                     SELECT

@@ -16,6 +16,7 @@ from .appointments import (
     get_appointment_columns,
     serialize_appointment,
 )
+from .customer_auth import decode_customer_token
 
 
 public_bp = Blueprint(
@@ -181,6 +182,37 @@ def public_book_appointment():
         }), 400
 
     try:
+        customer_id = None
+        booking_customer = None
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header:
+            if not auth_header.startswith("Bearer "):
+                return jsonify({
+                    "status": "error",
+                    "message": "Invalid customer authentication token",
+                }), 401
+            customer_id = decode_customer_token(auth_header.split(" ", 1)[1].strip())
+            if not customer_id:
+                return jsonify({
+                    "status": "error",
+                    "message": "Invalid customer authentication token",
+                }), 401
+            active_customer = db.session.execute(
+                text("""
+                    SELECT id::text AS id, full_name, phone, email
+                    FROM customers
+                    WHERE id = :customer_id
+                      AND is_active = TRUE
+                """),
+                {"customer_id": customer_id},
+            ).mappings().first()
+            if not active_customer:
+                return jsonify({
+                    "status": "error",
+                    "message": "Customer account not found or inactive",
+                }), 401
+            booking_customer = active_customer
+
         service = db.session.execute(
             text("""
                 SELECT
@@ -237,6 +269,7 @@ def public_book_appointment():
                     customer_name,
                     customer_phone,
                     customer_email,
+                    customer_id,
                     scheduled_at,
                     status,
                     notes
@@ -247,6 +280,7 @@ def public_book_appointment():
                     :customer_name,
                     :customer_phone,
                     :customer_email,
+                    :customer_id,
                     :scheduled_at,
                     'booked',
                     :notes
@@ -256,14 +290,25 @@ def public_book_appointment():
             {
                 "business_id": business["id"],
                 "service_id": service_id,
-                "customer_name": data["customer_name"].strip(),
-                "customer_phone": data["customer_phone"].strip(),
+                "customer_name": (
+                    booking_customer["full_name"]
+                    if booking_customer
+                    else data["customer_name"].strip()
+                ),
+                "customer_phone": (
+                    booking_customer["phone"] or data["customer_phone"].strip()
+                    if booking_customer
+                    else data["customer_phone"].strip()
+                ),
                 "customer_email": (
-                    data["customer_email"].strip()
+                    booking_customer["email"]
+                    if booking_customer
+                    else data["customer_email"].strip()
                     if isinstance(data.get("customer_email"), str)
                     and data["customer_email"].strip()
                     else None
                 ),
+                "customer_id": customer_id,
                 "scheduled_at": scheduled_at,
                 "notes": (
                     data["notes"].strip()
