@@ -2649,6 +2649,23 @@ select {
   align-self: center;
 }
 
+.login-password-field {
+  position: relative;
+}
+
+.login-password-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.login-password-toggle:disabled {
+  cursor: wait;
+}
+
 .login-card > p {
   color: #cbd5e1;
 }
