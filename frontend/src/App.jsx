@@ -233,7 +233,7 @@ export default function App() {
   const [customerTokens, setCustomerTokens] = useState([]);
   const [currentTime, setCurrentTime] = useState(0);
 
-  const [businessSlug, setBusinessSlug] = useState("demo-clinic");
+  const [businessSlug, setBusinessSlug] = useState("vinay-clinic");
   const [business, setBusiness] = useState(null);
   const [publicServices, setPublicServices] = useState([]);
   const [adminServices, setAdminServices] = useState([]);
