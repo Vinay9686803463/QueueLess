@@ -510,13 +510,13 @@ export default function App() {
     e.preventDefault();
 
     try {
-      const payload = {
-        slug: businessSlug,
-        service_id: selectedService,
-        customer_name: customerName,
-        customer_phone: customerPhone,
-        customer_email: customerEmail,
-      };
+    const payload = {
+  business_id: business?.id,
+  service_id: selectedService,
+  customer_name: customerName,
+  customer_phone: customerPhone,
+  customer_email: customerEmail,
+};
 
       let data;
 
