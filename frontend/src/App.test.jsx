@@ -323,13 +323,18 @@ describe("QueueLess frontend", () => {
     expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     expect(screen.getByText("Sign in to book visits and track your place in line.")).toBeInTheDocument();
     expect(screen.getByLabelText("Email address")).toHaveAttribute("placeholder", "customer@example.com");
+    const customerPassword = screen.getByLabelText("Password");
+    expect(customerPassword).toHaveAttribute("placeholder", "Enter your password");
+    expect(customerPassword).toHaveValue("");
     expect(customerCard.querySelector(".login-password-field")).toBeInTheDocument();
     expect(customerCard.querySelector(".login-password-toggle")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Show password" }));
-    expect(screen.getByLabelText("Password")).toHaveAttribute("type", "text");
+    expect(customerPassword).toHaveAttribute("type", "text");
     await user.click(screen.getByRole("button", { name: "Hide password" }));
-    expect(screen.getByLabelText("Password")).toHaveAttribute("type", "password");
+    expect(customerPassword).toHaveAttribute("type", "password");
+    await user.type(customerPassword, "secret123");
+    expect(customerPassword).toHaveValue("secret123");
 
     await user.click(screen.getByRole("button", { name: "Switch to Admin Portal" }));
     const adminPage = screen.getByRole("main");

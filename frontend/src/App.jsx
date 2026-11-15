@@ -1240,6 +1240,7 @@ export default function App() {
                   id="customer-password"
                   className="input"
                   type={showCustomerPassword ? "text" : "password"}
+                  placeholder="Enter your password"
                   disabled={customerLoginLoading}
                   autoComplete={
                     customerAuthMode === "login"
