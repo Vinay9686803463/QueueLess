@@ -3096,7 +3096,7 @@ select {
   font-size: 29px;
   font-weight: 800;
   letter-spacing: -1px;
-  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
 .admin-mode .stat-card > small {
@@ -3610,3 +3610,184 @@ select {
   }
 }
 
+
+/* =========================================
+   QUEUELESS CUSTOMER LOGIN — DESIGN FIX
+   Customer portal only. Admin untouched.
+========================================= */
+
+.customer-login-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
+  align-items: center;
+  gap: clamp(28px, 6vw, 85px);
+  width: 100%;
+  min-height: calc(100vh - 76px);
+  margin: 0;
+  padding: clamp(28px, 5vw, 64px);
+  background: linear-gradient(135deg, #f0fdfa, #eff6ff);
+}
+
+.customer-login-page .login-art {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 430px;
+  overflow: hidden;
+  border-radius: 25px;
+  background: linear-gradient(145deg, #073c41, #0b7479);
+  box-shadow: 0 20px 55px rgba(7, 60, 65, 0.16);
+}
+
+.customer-login-page .login-art-orbit {
+  border-color: #ffffff35;
+}
+
+.customer-login-page .login-art-card {
+  position: relative;
+  z-index: 1;
+}
+
+.customer-login-page .login-card {
+  justify-self: center;
+  align-self: center;
+  width: 100%;
+  max-width: 440px;
+  padding: 38px;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 20px 55px rgba(15, 23, 42, 0.09);
+}
+
+.customer-login-page .login-card h1 {
+  margin: 12px 0 9px;
+  color: #163b43;
+  font-size: clamp(28px, 3vw, 35px);
+  letter-spacing: -1px;
+}
+
+.customer-login-page .login-card > p {
+  margin-bottom: 25px;
+  color: #718096;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.customer-login-page .login-card .eyebrow {
+  color: #0b8580;
+}
+
+.customer-login-page .login-card label {
+  display: block;
+  margin: 15px 0 8px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.customer-login-page .login-card .input {
+  height: 47px;
+  padding: 0 13px;
+  border: 1px solid #dce5e9;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #1e293b;
+  font-size: 13px;
+}
+
+.customer-login-page .login-card .input:focus {
+  border-color: #0b8580;
+  box-shadow: 0 0 0 3px #0b85801a;
+}
+
+.customer-login-page .login-password-field {
+  position: relative;
+}
+
+.customer-login-page .login-password-toggle {
+  top: 11px;
+  right: 12px;
+  color: #0b777d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.customer-login-page .btn-admin-login {
+  width: 100%;
+  min-height: 47px;
+  margin-top: 20px;
+  border: none;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #087c78, #12a6a0);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 7px 17px #087c7828;
+}
+
+.customer-login-page .btn-admin-login:hover:not(:disabled) {
+  background: linear-gradient(135deg, #06635f, #078c86);
+}
+
+.customer-login-page .login-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 17px;
+}
+
+.customer-login-page .login-secondary-actions .btn {
+  flex: 1 1 130px;
+  min-height: 42px;
+  border: 1px solid #dce8e8;
+  border-radius: 8px;
+  background: #f0fdfa;
+  color: #087c78;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: normal;
+}
+
+.customer-login-page .login-secondary-actions .btn:hover {
+  background: #ccfbf1;
+}
+
+.customer-login-page .login-footnote {
+  display: block;
+  margin-top: 22px;
+  color: #94a3b8;
+  text-align: center;
+  font-size: 10px;
+}
+
+@media (max-width: 760px) {
+  .customer-login-page {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    min-height: auto;
+    padding: 25px 18px 40px;
+  }
+
+  .customer-login-page .login-art {
+    min-height: 240px;
+  }
+
+  .customer-login-page .login-card {
+    max-width: 520px;
+    padding: 28px 23px;
+  }
+
+  .customer-login-page .login-art-card {
+    transform: scale(0.85);
+  }
+}
+
+@media (max-width: 380px) {
+  .customer-login-page .login-card {
+    padding: 24px 17px;
+  }
+
+  .customer-login-page .login-secondary-actions {
+    flex-direction: column;
+  }
+}
