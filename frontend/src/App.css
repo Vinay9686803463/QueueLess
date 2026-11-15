@@ -3473,3 +3473,140 @@ select {
   }
 }
 
+
+/* QUEUELESS ADMIN — ENFORCE LIGHT WORKSPACE */
+.app-shell.admin-mode {
+  color-scheme: only light;
+  background: #f3f6fa !important;
+  color: #172b3a;
+}
+
+.admin-mode .admin-main {
+  background: #f3f6fa !important;
+  color: #172b3a;
+}
+
+.admin-mode .admin-toolbar,
+.admin-mode .stat-card,
+.admin-mode .dashboard-panel {
+  background-color: #ffffff !important;
+  color: #294653;
+}
+
+.admin-mode .admin-toolbar {
+  background-image: linear-gradient(120deg, #ffffff, #fbfdff);
+}
+
+.admin-mode .stat-card {
+  background-image: linear-gradient(145deg, #ffffff, #fbfdff);
+}
+
+.admin-mode .dashboard-panel {
+  background-image: none;
+}
+
+.admin-mode .queue-table th {
+  background: #f3f7fa !important;
+  color: #71838e;
+}
+
+.admin-mode .queue-table td {
+  color: #536975;
+}
+
+.admin-mode .service-editor,
+.admin-mode .health-status {
+  background: #f7fafb !important;
+  color: #294653;
+}
+
+
+/* =========================================================
+   QUEUELESS — FINAL BUTTON CONTRAST POLISH
+========================================================= */
+
+/* Primary action buttons: readable white text on blue */
+.admin-mode .admin-main .btn:not(.btn-secondary):not(.btn-outline):not(.btn-ghost) {
+  color: #ffffff !important;
+  font-weight: 700;
+  text-shadow: none;
+}
+
+.admin-mode .admin-main .btn:not(:disabled):hover {
+  filter: brightness(.94);
+}
+
+.admin-mode .admin-main .btn:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+/* Disabled actions: visibly inactive, without faded text */
+.admin-mode .admin-main .btn:disabled {
+  color: #53677b !important;
+  background: #e5edf5 !important;
+  border-color: #d5e0eb !important;
+  opacity: 1;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* Secondary and outline actions */
+.admin-mode .admin-main .btn-secondary,
+.admin-mode .admin-main .btn-outline {
+  color: #176b75 !important;
+  background: #ffffff !important;
+  border: 1px solid #cfe0e6;
+}
+
+.admin-mode .admin-main .btn-secondary:hover,
+.admin-mode .admin-main .btn-outline:hover {
+  color: #0b535e !important;
+  background: #eff8f8 !important;
+  border-color: #a9d6d6;
+}
+
+/* Queue row actions */
+.admin-mode .row-actions button {
+  color: #176b75;
+  background: #ffffff;
+  border-color: #d5e4e9;
+  font-weight: 700;
+}
+
+.admin-mode .row-actions .danger-action {
+  color: #b33b43;
+  background: #fffafa;
+  border-color: #f0d5d7;
+}
+
+.admin-mode .row-actions .danger-action:hover {
+  color: #982d36;
+  background: #fff0f1;
+  border-color: #e8bfc3;
+}
+
+/* Top navigation logout */
+.admin-mode .topbar .btn-logout {
+  color: #ffffff !important;
+  background: #dc4652;
+  border-color: #dc4652;
+}
+
+.admin-mode .topbar .btn-logout:hover {
+  color: #ffffff !important;
+  background: #c93643;
+}
+
+/* Consistent keyboard focus */
+.admin-mode .admin-main button:focus-visible {
+  outline: 3px solid #38bfc0;
+  outline-offset: 3px;
+}
+
+/* Keep button labels legible on narrow screens */
+@media (max-width: 760px) {
+  .admin-mode .admin-main .btn {
+    min-height: 36px;
+  }
+}
+
