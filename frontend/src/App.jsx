@@ -226,14 +226,21 @@ export default function App() {
   );
   const [backendStatus, setBackendStatus] = useState("checking");
   const [notice, setNotice] = useState("");
-  const [token, setToken] = useState("");
-  const [customerToken, setCustomerToken] = useState("");
+const [token, setToken] = useState(
+  () => localStorage.getItem("queueless_token") || ""
+);
+
+const [customerToken, setCustomerToken] = useState(
+  () => localStorage.getItem("queueless_customer_token") || ""
+);
   const [customerProfile, setCustomerProfile] = useState(null);
   const [customerAppointments, setCustomerAppointments] = useState([]);
   const [customerTokens, setCustomerTokens] = useState([]);
   const [currentTime, setCurrentTime] = useState(0);
 
-  const [businessSlug, setBusinessSlug] = useState("vinay-clinic");
+  const [businessSlug, setBusinessSlug] = useState(
+    () => import.meta.env.VITE_DEFAULT_BUSINESS_SLUG || ""
+  );
   const [business, setBusiness] = useState(null);
   const [publicServices, setPublicServices] = useState([]);
   const [adminServices, setAdminServices] = useState([]);
@@ -304,11 +311,6 @@ export default function App() {
   const [editingServiceId, setEditingServiceId] = useState("");
 
   useEffect(() => {
-    localStorage.removeItem("queueless_token");
-    localStorage.removeItem("queueless_customer_token");
-  }, []);
-
-  useEffect(() => {
     selectedBusinessIdRef.current = selectedBusinessId;
   }, [selectedBusinessId]);
 
@@ -321,6 +323,29 @@ export default function App() {
       .then(() => setBackendStatus("online"))
       .catch(() => setBackendStatus("offline"));
   }, []);
+
+/* ADMIN TOKEN PERSISTENCE */
+useEffect(() => {
+  if (token) {
+    localStorage.setItem("queueless_token", token);
+  } else {
+    localStorage.removeItem("queueless_token");
+  }
+}, [token]);
+
+/* CUSTOMER TOKEN PERSISTENCE */
+useEffect(() => {
+  if (customerToken) {
+    localStorage.setItem("queueless_customer_token", customerToken);
+  } else {
+    localStorage.removeItem("queueless_customer_token");
+  }
+}, [customerToken]);
+
+/* EXISTING EFFECT — KEEP THIS */
+useEffect(() => {
+  selectedBusinessIdRef.current = selectedBusinessId;
+}, [selectedBusinessId]);
 
   useEffect(() => {
     const updateTime = () => setCurrentTime(Date.now());
