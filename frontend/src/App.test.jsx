@@ -44,6 +44,26 @@ describe("QueueLess frontend", () => {
     expect(screen.queryByText(/A BETTER WAY TO WAIT/i)).not.toBeInTheDocument();
   });
 
+  it("matches the customer login copy and supports password visibility", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse({}));
+    render(<App />);
+
+    expect(await screen.findByText("CUSTOMER PORTAL")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(screen.getByText("Sign in to book visits and track your place in line.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Email address")).toHaveAttribute("placeholder", "customer@example.com");
+    expect(screen.getByRole("button", { name: "Sign in to customer portal" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create customer account" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Forgot password" })).toBeInTheDocument();
+
+    const password = screen.getByLabelText("Password");
+    expect(password).toHaveAttribute("type", "password");
+    await user.click(screen.getByRole("button", { name: "Show password" }));
+    expect(password).toHaveAttribute("type", "text");
+    await user.click(screen.getByRole("button", { name: "Hide password" }));
+    expect(password).toHaveAttribute("type", "password");
+  });
+
   it("registers customers, loads their history, and books an appointment with their token", async () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options = {}) => {
       const requestUrl = String(url);
@@ -296,14 +316,29 @@ describe("QueueLess frontend", () => {
     render(<App />);
     const customerPage = screen.getByRole("main");
     expect(customerPage).toHaveClass("login-page");
-    expect(customerPage.querySelector(".login-card")).toHaveClass("customer-login-card");
+    const customerCard = customerPage.querySelector(".login-card");
+    expect(customerCard).toHaveClass("customer-login-card");
     expect(customerPage.querySelector(".login-art")).toBeInTheDocument();
+    expect(screen.getByText("CUSTOMER PORTAL")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(screen.getByText("Sign in to book visits and track your place in line.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Email address")).toHaveAttribute("placeholder", "customer@example.com");
+    expect(customerCard.querySelector(".login-password-field")).toBeInTheDocument();
+    expect(customerCard.querySelector(".login-password-toggle")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show password" }));
+    expect(screen.getByLabelText("Password")).toHaveAttribute("type", "text");
+    await user.click(screen.getByRole("button", { name: "Hide password" }));
+    expect(screen.getByLabelText("Password")).toHaveAttribute("type", "password");
 
     await user.click(screen.getByRole("button", { name: "Switch to Admin Portal" }));
     const adminPage = screen.getByRole("main");
     expect(adminPage).toHaveClass("login-page");
-    expect(adminPage.querySelector(".login-card")).toHaveClass("login-card");
+    const adminCard = adminPage.querySelector(".login-card");
+    expect(adminCard).toHaveClass("login-card");
     expect(adminPage.querySelector(".login-art")).toBeInTheDocument();
+    expect(adminCard.querySelector(".login-password-field")).toBeInTheDocument();
+    expect(adminCard.querySelector(".login-password-toggle")).toBeInTheDocument();
   });
 
   it("shows Forgot Password actions in both portals without changing registration", async () => {

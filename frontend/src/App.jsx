@@ -278,6 +278,7 @@ export default function App() {
   const [recoveryMessage, setRecoveryMessage] = useState("");
   const [passwordChanged, setPasswordChanged] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showCustomerPassword, setShowCustomerPassword] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [customerAuthMode, setCustomerAuthMode] = useState("login");
   const [regName, setRegName] = useState("");
@@ -1224,6 +1225,7 @@ export default function App() {
                 className="input"
                 type="email"
                 autoComplete="email"
+                placeholder="customer@example.com"
                 disabled={customerLoginLoading}
                 value={customerEmail}
                 onChange={(e) => {
@@ -1233,23 +1235,34 @@ export default function App() {
                 required
               />
               <label htmlFor="customer-password">Password</label>
-              <input
-                id="customer-password"
-                className="input"
-                type="password"
-                disabled={customerLoginLoading}
-                autoComplete={
-                  customerAuthMode === "login"
-                    ? "current-password"
-                    : "new-password"
-                }
-                value={customerPassword}
-                onChange={(e) => {
-                  setCustomerPassword(e.target.value);
-                  setCustomerLoginError("");
-                }}
-                required
-              />
+              <div className="login-password-field">
+                <input
+                  id="customer-password"
+                  className="input"
+                  type={showCustomerPassword ? "text" : "password"}
+                  disabled={customerLoginLoading}
+                  autoComplete={
+                    customerAuthMode === "login"
+                      ? "current-password"
+                      : "new-password"
+                  }
+                  value={customerPassword}
+                  onChange={(e) => {
+                    setCustomerPassword(e.target.value);
+                    setCustomerLoginError("");
+                  }}
+                  required
+                />
+                <button
+                  type="button"
+                  className="login-password-toggle"
+                  disabled={customerLoginLoading}
+                  onClick={() => setShowCustomerPassword((visible) => !visible)}
+                  aria-label={showCustomerPassword ? "Hide password" : "Show password"}
+                >
+                  {showCustomerPassword ? "Hide" : "Show"}
+                </button>
+              </div>
               {customerAuthMode === "login" && (
                 <LoginError message={customerLoginError} />
               )}
@@ -1774,7 +1787,7 @@ export default function App() {
               />
 
               <label htmlFor="password">Password</label>
-              <div style={{ position: "relative" }}>
+              <div className="login-password-field">
                 <input
                   id="password"
                   className="input"
@@ -1792,7 +1805,7 @@ export default function App() {
                   type="button"
                   disabled={adminLoginLoading}
                   onClick={() => setShowPassword((v) => !v)}
-                  style={{ position: "absolute", right: "10px", top: "10px", border: "none", background: "transparent", cursor: "pointer" }}
+                  className="login-password-toggle"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? "Hide" : "Show"}
