@@ -101,7 +101,16 @@ describe("QueueLess frontend", () => {
           services: [{ id: "service-1", service_name: "Consultation", duration_minutes: 30 }],
         });
       }
-      if (requestUrl.includes("/api/public/business/demo-clinic")) {
+      if (requestUrl.includes("/api/public/businesses/" ) && requestUrl.endsWith("/services")) {
+        return jsonResponse({ services: [{ id: "service-1", service_name: "Consultation", duration_minutes: 30, price: 0 }] });
+      }
+      if (requestUrl.includes("/api/public/businesses")) {
+        return jsonResponse({ businesses: [{ id: "business-1", business_name: "Demo Clinic", business_type: "Clinic", is_active: true }] });
+      }
+      if (requestUrl.includes("/api/public/availability")) {
+        return jsonResponse({ slots: [{ start: "2027-01-02T10:00:00Z", end: "2027-01-02T11:00:00Z", label: "10:00 AM – 11:00 AM" }] });
+      }
+      if (requestUrl.includes("/api/public/business/demo-clinic") || requestUrl.includes("/api/public/business/business-1")) {
         return jsonResponse({
           business: { id: "business-1", business_name: "Demo Clinic" },
         });
@@ -143,11 +152,12 @@ describe("QueueLess frontend", () => {
     expect(await screen.findByText(/You’re signed in/)).toBeInTheDocument();
     expect(await screen.findByText(/Consultation · confirmed/)).toBeInTheDocument();
     expect(await screen.findByText(/Token #14 · waiting · 2 ahead/)).toBeInTheDocument();
-    expect(localStorage.getItem("queueless_customer_token")).toBeNull();
+    expect(localStorage.getItem("queueless_customer_token")).toBe("customer-token");
 
-    await user.click(screen.getByRole("button", { name: "Load" }));
+    await user.selectOptions(screen.getByLabelText("Choose a business"), "business-1");
     await user.selectOptions(screen.getByLabelText("Select service"), "service-1");
-    await user.type(screen.getByLabelText("Appointment date and time"), "2027-01-02T10:00");
+    await user.type(screen.getByLabelText("Available appointment date"), "2027-01-02");
+    await user.selectOptions(await screen.findByLabelText(/Available time/), "2027-01-02T10:00:00Z");
     await user.click(screen.getByRole("button", { name: /Continue to check-in/i }));
 
     expect(await screen.findByText(/Appointment ID: appointment-2/)).toBeInTheDocument();
@@ -770,7 +780,6 @@ describe("QueueLess frontend", () => {
     await waitForRequest("/queue/resume");
     await user.click(screen.getAllByRole("button", { name: "Call Next Customer", exact: true })[0]);
     await waitForRequest("/queue/call-next");
-    await user.click(screen.getByRole("button", { name: "Generate 12 Demo Customers" }));
     await waitForRequest("/queue/demo");
     await user.click(screen.getByRole("button", { name: "Remove Demo Entries" }));
     await waitForRequest("/queue/demo", "DELETE");

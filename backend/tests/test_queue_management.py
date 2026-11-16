@@ -168,6 +168,18 @@ def test_demo_queue_seeding_is_idempotent_and_cleanup_preserves_real_entries(
     )
     assert first_seed.status_code == 201
     assert first_seed.get_json()["created"] == 12
+    assert first_seed.get_json()["total_demo_appointments"] == 12
+
+    appointments = client.get("/api/appointments", headers=headers).get_json()["appointments"]
+    demo_appointments = [item for item in appointments if (item.get("notes") or "").startswith("DEMO-GENERATED:")]
+    assert len(demo_appointments) == 12
+    assert {item["duration_minutes"] for item in demo_appointments} == {60}
+    assert len({item["customer_id"] for item in demo_appointments}) == 12
+    ordered_appointments = sorted(demo_appointments, key=lambda item: item["scheduled_at"])
+    for previous, following in zip(ordered_appointments, ordered_appointments[1:]):
+        previous_end = datetime.fromisoformat(previous["scheduled_at"]) + timedelta(minutes=60)
+        assert previous_end <= datetime.fromisoformat(following["scheduled_at"])
+    demo_date = ordered_appointments[0]["scheduled_at"][:10]
 
     second_seed = client.post(
         f"/api/businesses/{business_id}/queue/demo",
@@ -177,7 +189,7 @@ def test_demo_queue_seeding_is_idempotent_and_cleanup_preserves_real_entries(
     assert second_seed.get_json()["created"] == 0
 
     queue = client.get(
-        f"/api/businesses/{business_id}/queue",
+        f"/api/businesses/{business_id}/queue?date={demo_date}",
         headers=headers,
     )
     assert queue.status_code == 200
@@ -188,8 +200,13 @@ def test_demo_queue_seeding_is_idempotent_and_cleanup_preserves_real_entries(
     assert len({entry["id"] for entry in demo_entries}) == 12
     assert len({entry["tracking_code"] for entry in demo_entries}) == 12
     assert all(entry["customer_name"].startswith("DEMO · ") for entry in demo_entries)
+    assert len(demo_entries) == 12
+    today_queue = client.get(
+        f"/api/businesses/{business_id}/queue?date={queue_routes.queue_date_today().isoformat()}",
+        headers=headers,
+    ).get_json()
+    real_entries = [entry for entry in today_queue["waiting"] if entry["id"] == real_token_id]
     assert len(real_entries) == 1
-    assert real_entries[0]["id"] == real_token_id
 
     removal = client.delete(
         f"/api/businesses/{business_id}/queue/demo",

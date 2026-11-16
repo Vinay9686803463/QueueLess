@@ -1,12 +1,12 @@
-import random
 import secrets
 import uuid as uuid_lib
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta, time
 from urllib.parse import urlparse
 
 from flask import Blueprint, request, jsonify, g, current_app
-from sqlalchemy import bindparam, text
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
+from werkzeug.security import generate_password_hash
 
 from ..extensions import db
 from ..utils.rate_limit import rate_limiter
@@ -57,6 +57,26 @@ def _is_uuid(value):
 def queue_date_today():
     # The database stores dates in UTC and no business timezone column exists.
     return datetime.now(timezone.utc).date()
+
+
+def _business_working_days(business_id):
+    """Read optional legacy schedule data only when that schema column exists."""
+    has_column = db.session.execute(text("""
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='businesses'
+              AND column_name='working_days'
+        )
+    """)).scalar()
+    if not has_column:
+        return {0, 1, 2, 3, 4}
+    days = db.session.execute(text("""
+        SELECT working_days FROM businesses WHERE id=:business_id
+    """), {"business_id": business_id}).scalar()
+    try:
+        return {int(day) for day in days if 0 <= int(day) <= 6}
+    except (TypeError, ValueError):
+        return {0, 1, 2, 3, 4}
 
 
 def generate_token_number(business_id, queue_date):
@@ -734,11 +754,10 @@ def seed_demo_queue(business_id):
     if business_id not in accessible_business_ids(user_id):
         return jsonify({"status": "error", "message": "Business not found"}), 404
 
-    today = queue_date_today()
     try:
         business = db.session.execute(
             text("""
-                SELECT id
+                SELECT id, opening_time, closing_time
                 FROM businesses
                 WHERE id = :business_id AND is_active = TRUE
                 FOR UPDATE
@@ -765,94 +784,205 @@ def seed_demo_queue(business_id):
                 "message": "Add an active service before generating demo queue entries.",
             }), 409
 
-        tracking_codes = {
-            f"{DEMO_TRACKING_PREFIX}{business_id.replace('-', '')}-{today:%Y%m%d}-{number:02d}"
-            for number in range(1, DEMO_QUEUE_SIZE + 1)
-        }
-        existing_codes = set(db.session.execute(
-            text("""
-                SELECT tracking_code
-                FROM queue_tokens
-                WHERE business_id = :business_id
-                  AND queue_date = :queue_date
-                  AND tracking_code IN :tracking_codes
-                  AND customer_id IS NULL
-                  AND appointment_id IS NULL
-                FOR UPDATE
-            """).bindparams(bindparam("tracking_codes", expanding=True)),
-            {
-                "business_id": business_id,
-                "queue_date": today,
-                "tracking_codes": tuple(tracking_codes),
-            },
-        ).scalars().all())
-
-        names = random.SystemRandom().sample(
-            DEMO_CUSTOMER_NAMES, DEMO_QUEUE_SIZE
-        )
-        created = 0
-        for index in range(1, DEMO_QUEUE_SIZE + 1):
-            tracking_code = (
-                f"{DEMO_TRACKING_PREFIX}{business_id.replace('-', '')}-"
-                f"{today:%Y%m%d}-{index:02d}"
-            )
-            if tracking_code in existing_codes:
+        compact_id = business_id.replace("-", "")
+        marker_prefix = f"DEMO-GENERATED:{compact_id}:"
+        existing_appointments = db.session.execute(text("""
+            SELECT id::text AS id, notes, service_id::text AS service_id,
+                   scheduled_at, COALESCE(duration_minutes, 60) AS duration_minutes
+            FROM appointments
+            WHERE business_id = :business_id AND notes LIKE :marker_prefix
+            FOR UPDATE
+        """), {"business_id": business_id, "marker_prefix": f"{marker_prefix}%"}).mappings().all()
+        appointments_by_index = {}
+        for appointment in existing_appointments:
+            try:
+                index = int(appointment["notes"].rsplit(":", 1)[1])
+                if 1 <= index <= DEMO_QUEUE_SIZE:
+                    appointments_by_index[index] = dict(appointment)
+            except (TypeError, ValueError):
                 continue
+        already_generated = len(appointments_by_index)
 
-            token_number = generate_token_number(business_id, today)
-            db.session.execute(
-                text("""
-                    INSERT INTO queue_tokens (
-                        business_id,
-                        service_id,
-                        customer_name,
-                        customer_phone,
-                        token_number,
-                        queue_date,
-                        tracking_code,
-                        status,
-                        joined_at,
-                        created_at,
-                        updated_at
-                    )
-                    VALUES (
-                        :business_id,
-                        :service_id,
-                        :customer_name,
-                        :customer_phone,
-                        :token_number,
-                        :queue_date,
-                        :tracking_code,
-                        'waiting',
-                        NOW() - make_interval(mins => :minutes_ago),
-                        NOW() - make_interval(mins => :minutes_ago),
-                        NOW() - make_interval(mins => :minutes_ago)
-                    )
-                """),
-                {
-                    "business_id": business_id,
-                    "service_id": random.choice(services)["id"],
-                    "customer_name": f"DEMO · {names[index - 1]}",
-                    "customer_phone": f"555-01{index:02d}",
-                    "token_number": token_number,
-                    "queue_date": today,
-                    "tracking_code": tracking_code,
-                    "minutes_ago": random.randint(5, 180),
-                },
-            )
-            created += 1
+        occupied = db.session.execute(text("""
+            SELECT a.scheduled_at,
+                   COALESCE(a.duration_minutes, s.duration_minutes) AS duration_minutes
+            FROM appointments a JOIN services s ON s.id = a.service_id
+            WHERE a.business_id = :business_id
+              AND a.status IN ('booked','confirmed','checked_in')
+        """), {"business_id": business_id}).mappings().all()
+        intervals = [(row["scheduled_at"], row["scheduled_at"] + timedelta(minutes=row["duration_minutes"])) for row in occupied]
+        opening = business["opening_time"] or time(9, 0)
+        working_days = _business_working_days(business_id)
+        closing = business["closing_time"]
+        closing_minutes = closing.hour * 60 + closing.minute if closing else opening.hour * 60 + opening.minute + 12 * 60
+        opening_minutes = opening.hour * 60 + opening.minute
+        if closing_minutes <= opening_minutes:
+            closing_minutes += 24 * 60
+
+        # Schedule only missing appointments. Start on the next future opening,
+        # distribute work across weekdays when the business day is shorter than 12h.
+        slots = {}
+        pending = [n for n in range(1, DEMO_QUEUE_SIZE + 1) if n not in appointments_by_index]
+        cursor_day = datetime.now(timezone.utc).date()
+        now = datetime.now(timezone.utc)
+        search_days = 0
+        while pending and search_days < 370:
+            if cursor_day.weekday() not in working_days:
+                cursor_day += timedelta(days=1)
+                search_days += 1
+                continue
+            day_open = datetime.combine(cursor_day, time(opening_minutes // 60 % 24, opening_minutes % 60), timezone.utc)
+            day_close = datetime.combine(cursor_day, time(closing_minutes // 60 % 24, closing_minutes % 60), timezone.utc)
+            if closing_minutes >= 24 * 60:
+                day_close += timedelta(days=1)
+            if cursor_day == now.date() and now > day_open:
+                next_slot = now.replace(minute=0, second=0, microsecond=0)
+                if next_slot < now:
+                    next_slot += timedelta(hours=1)
+                day_open = max(day_open, next_slot)
+            day_conflicts = sorted((start, end) for start, end in intervals if start < day_close and end > day_open)
+            segments = []
+            segment_start = day_open
+            for conflict_start, conflict_end in day_conflicts:
+                if conflict_start > segment_start:
+                    segments.append((segment_start, conflict_start))
+                segment_start = max(segment_start, conflict_end)
+            if day_close > segment_start:
+                segments.append((segment_start, day_close))
+            # Do not split a consecutive demo run around a real appointment.
+            chosen = next(((start, end) for start, end in segments if end - start >= timedelta(hours=1)), None)
+            if chosen:
+                start, end = chosen
+                count = min(len(pending), int((end - start).total_seconds() // 3600))
+                for offset in range(count):
+                    idx = pending.pop(0)
+                    slot_start = start + timedelta(hours=offset)
+                    slots[idx] = slot_start
+                    intervals.append((slot_start, slot_start + timedelta(hours=1)))
+            cursor_day += timedelta(days=1)
+            search_days += 1
+        if pending:
+            db.session.rollback()
+            return jsonify({"status": "error", "message": "Could not fit demo appointments within configured business hours."}), 409
+
+        now_db = datetime.now(timezone.utc)
+        for index in range(1, DEMO_QUEUE_SIZE + 1):
+            display_name = f"DEMO · {DEMO_CUSTOMER_NAMES[(index - 1) % len(DEMO_CUSTOMER_NAMES)]}"
+            phone = f"555-01{index:02d}"
+            email = f"demo-{compact_id}-{index:02d}@queueless.local"
+            customer = db.session.execute(text("""
+                SELECT id::text AS id, full_name FROM customers WHERE email = :email FOR UPDATE
+            """), {"email": email}).mappings().first()
+            if customer and customer["full_name"] != display_name:
+                db.session.rollback()
+                return jsonify({"status": "error", "message": "Demo customer identifier conflicts with an existing account."}), 409
+            if not customer:
+                customer = db.session.execute(text("""
+                    INSERT INTO customers (full_name,email,phone,password_hash,is_active)
+                    VALUES (:name,:email,:phone,:password_hash,TRUE)
+                    RETURNING id::text AS id, full_name
+                """), {"name": display_name, "email": email, "phone": phone,
+                       "password_hash": generate_password_hash(secrets.token_urlsafe(32))}).mappings().first()
+            appointment = appointments_by_index.get(index)
+            service_id = services[(index - 1) % len(services)]["id"]
+            if not appointment:
+                scheduled_at = slots[index]
+                appointment = db.session.execute(text("""
+                    INSERT INTO appointments (
+                        business_id,service_id,customer_name,customer_phone,customer_email,
+                        customer_id,scheduled_at,duration_minutes,status,notes
+                    ) VALUES (
+                        :business_id,:service_id,:name,:phone,:email,:customer_id,
+                        :scheduled_at,60,'confirmed',:notes
+                    ) RETURNING id::text AS id, scheduled_at, service_id::text AS service_id
+                """), {"business_id": business_id, "service_id": service_id,
+                       "name": display_name, "phone": phone, "email": email,
+                       "customer_id": customer["id"], "scheduled_at": scheduled_at,
+                       "notes": f"{marker_prefix}{index}"}).mappings().first()
+                appointment = dict(appointment)
+                appointments_by_index[index] = appointment
+            else:
+                appointment = dict(appointment)
+                # Adopt existing demo appointments without changing their booked time.
+                db.session.execute(text("""
+                    UPDATE appointments SET customer_id=:customer_id,
+                        customer_name=:name, customer_phone=:phone, customer_email=:email,
+                        service_id=:service_id, duration_minutes=60, updated_at=NOW()
+                    WHERE id=:appointment_id
+                """), {"customer_id": customer["id"], "name": display_name,
+                       "phone": phone, "email": email, "service_id": service_id,
+                       "appointment_id": appointment["id"]})
+
+            queue_date = appointment["scheduled_at"].date()
+            tracking_code = f"DEMO-{compact_id}-SLOT-{index:02d}"
+            queue_entry = db.session.execute(text("""
+                SELECT id FROM queue_tokens WHERE appointment_id=:appointment_id FOR UPDATE
+            """), {"appointment_id": appointment["id"]}).first()
+            if not queue_entry:
+                queue_entry = db.session.execute(text("""
+                    SELECT id FROM queue_tokens WHERE tracking_code=:tracking_code FOR UPDATE
+                """), {"tracking_code": tracking_code}).first()
+            if not queue_entry:
+                legacy = db.session.execute(text("""
+                    SELECT id FROM queue_tokens
+                    WHERE business_id=:business_id AND customer_id IS NULL
+                      AND appointment_id IS NULL AND tracking_code LIKE :prefix
+                      AND right(tracking_code, 2)=:suffix
+                    ORDER BY queue_date DESC, created_at DESC LIMIT 1 FOR UPDATE
+                """), {"business_id": business_id,
+                       "prefix": f"{DEMO_TRACKING_PREFIX}{compact_id}-%",
+                       "suffix": f"{index:02d}"}).first()
+                token_number = generate_token_number(business_id, queue_date)
+                if legacy:
+                    db.session.execute(text("""
+                        UPDATE queue_tokens SET appointment_id=:appointment_id,
+                            customer_id=:customer_id, service_id=:service_id,
+                            customer_name=:name, customer_phone=:phone,
+                            token_number=:token_number, queue_date=:queue_date,
+                            status='waiting', joined_at=:joined_at, updated_at=NOW()
+                        WHERE id=:id
+                    """), {"appointment_id": appointment["id"], "customer_id": customer["id"],
+                           "service_id": appointment["service_id"], "name": display_name,
+                           "phone": phone, "token_number": token_number,
+                           "queue_date": queue_date, "joined_at": now_db, "id": legacy[0]})
+                else:
+                    db.session.execute(text("""
+                        INSERT INTO queue_tokens (
+                            business_id,service_id,appointment_id,customer_name,customer_phone,
+                            customer_id,token_number,queue_date,tracking_code,status,joined_at
+                        ) VALUES (
+                            :business_id,:service_id,:appointment_id,:name,:phone,:customer_id,
+                            :token_number,:queue_date,:tracking_code,'waiting',:joined_at
+                        )
+                    """), {"business_id": business_id, "service_id": appointment["service_id"],
+                           "appointment_id": appointment["id"], "name": display_name,
+                           "phone": phone, "customer_id": customer["id"],
+                           "token_number": token_number, "queue_date": queue_date,
+                           "tracking_code": tracking_code, "joined_at": now_db})
+            else:
+                db.session.execute(text("""
+                    UPDATE queue_tokens SET appointment_id=:appointment_id,
+                        customer_id=:customer_id, service_id=:service_id,
+                        customer_name=:name, customer_phone=:phone,
+                        queue_date=:queue_date, status='waiting', updated_at=NOW()
+                    WHERE id=:id
+                """), {"appointment_id": appointment["id"], "customer_id": customer["id"],
+                       "service_id": appointment["service_id"], "name": display_name,
+                       "phone": phone, "queue_date": queue_date, "id": queue_entry[0]})
 
         db.session.commit()
+        total = db.session.execute(text("""
+            SELECT COUNT(*) FROM appointments
+            WHERE business_id=:business_id AND notes LIKE :marker
+        """), {"business_id": business_id, "marker": f"{marker_prefix}%"}).scalar()
+
         return jsonify({
             "status": "success",
-            "created": created,
+            "created": max(0, DEMO_QUEUE_SIZE - already_generated),
             "total_demo_entries": DEMO_QUEUE_SIZE,
-            "message": (
-                f"Created {created} demo queue entries."
-                if created
-                else "Demo queue entries already exist for today."
-            ),
-        }), 201 if created else 200
+            "total_demo_appointments": total,
+            "message": "Demo customers, appointments, and linked queue entries are ready.",
+        }), 201 if already_generated < DEMO_QUEUE_SIZE else 200
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Demo queue seeding failed")
@@ -887,13 +1017,25 @@ def remove_demo_queue(business_id):
             """),
             {"business_id": business_id},
         )
+        compact_id = business_id.replace("-", "")
+        marker = f"DEMO-GENERATED:{compact_id}:%"
+        linked_result = db.session.execute(text("""
+            DELETE FROM queue_tokens
+            WHERE business_id=:business_id AND appointment_id IN (
+                SELECT id FROM appointments
+                WHERE business_id=:business_id AND notes LIKE :marker
+            ) RETURNING id
+        """), {"business_id": business_id, "marker": marker})
+        linked_removed = len(linked_result.fetchall())
+        db.session.execute(text("""
+            DELETE FROM appointments
+            WHERE business_id=:business_id AND notes LIKE :marker
+        """), {"business_id": business_id, "marker": marker})
         result = db.session.execute(
             text("""
                 DELETE FROM queue_tokens
                 WHERE business_id = :business_id
                   AND tracking_code LIKE :demo_prefix
-                  AND customer_id IS NULL
-                  AND appointment_id IS NULL
                 RETURNING id
             """),
             {
@@ -901,7 +1043,14 @@ def remove_demo_queue(business_id):
                 "demo_prefix": f"{DEMO_TRACKING_PREFIX}{business_id.replace('-', '')}-%",
             },
         )
-        removed = len(result.fetchall())
+        removed = linked_removed + len(result.fetchall())
+        db.session.execute(text("""
+            DELETE FROM customers c
+            WHERE c.email LIKE :email_prefix
+              AND c.full_name LIKE 'DEMO · %'
+              AND NOT EXISTS (SELECT 1 FROM appointments a WHERE a.customer_id=c.id)
+              AND NOT EXISTS (SELECT 1 FROM queue_tokens q WHERE q.customer_id=c.id)
+        """), {"email_prefix": f"demo-{compact_id}-%@queueless.local"})
         db.session.commit()
         return jsonify({
             "status": "success",
