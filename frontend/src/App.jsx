@@ -253,6 +253,7 @@ const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_c
   const [queueDate, setQueueDate] = useState(
     () => new Date().toLocaleDateString("en-CA")
   );
+  const isTodayQueue = queueDate === new Date().toLocaleDateString("en-CA");
   const [queuePaused, setQueuePaused] = useState(false);
   const [queuePauseSupported, setQueuePauseSupported] = useState(true);
   const [businessesLoading, setBusinessesLoading] = useState(false);
@@ -953,11 +954,10 @@ useEffect(() => {
 
   const performQueueAction = async (actionKey, requestPath, successMessage) => {
     if (!selectedBusinessId || queueMutationInFlight.current) return;
-
-    if (queueDate !== new Date().toLocaleDateString("en-CA")) {
-      notify("Historical queue records are read-only. Select today's date to manage the live queue.");
-      return;
-    }
+if (queueDate !== new Date().toLocaleDateString("en-CA")) {
+  notify("Only today's queue can be managed. Future and historical queue records are read-only.");
+  return;
+}
     queueMutationInFlight.current = true;
     setQueueActionLoading(actionKey);
     try {
@@ -2122,7 +2122,11 @@ useEffect(() => {
                 <button
                   className="btn btn-teal"
                   onClick={callNext}
-                  disabled={!selectedBusinessId || queuePaused || Boolean(queueActionLoading)}
+                  disabled={
+                    !selectedBusinessId ||
+                    !isTodayQueue ||
+                    queuePaused ||
+                    Boolean(queueActionLoading)}
                 >
                   {queueActionLoading === "call-next" ? "Calling..." : "Call Next Customer →"}
                 </button>
@@ -2233,9 +2237,11 @@ useEffect(() => {
                 <div className="panel-heading">
                   <div>
                     <h2>
-                      {queueDate === new Date().toLocaleDateString("en-CA")
+                      {isTodayQueue
                         ? "Live waiting list"
-                        : "Queue history"}
+                        : queueDate > new Date().toLocaleDateString("en-CA")
+                          ? "Scheduled queue preview"
+                          : "Queue history"}
                     </h2>
                     <p>
                       {selectedBusiness?.business_name ||
@@ -2244,21 +2250,20 @@ useEffect(() => {
                     <label htmlFor="queueDateFilter">
                       View queue date
                       <input
-                        id="queueDateFilter"
-                        type="date"
-                        className="input"
-                        value={queueDate}
-                        max={new Date().toLocaleDateString("en-CA")}
-                        onChange={(event) =>
-                          setQueueDate(
-                            event.target.value ||
-                            new Date().toLocaleDateString("en-CA")
-                          )
-                        }
-                      />
+                      id="queueDateFilter"
+                      type="date"
+                      className="input"
+                      value={queueDate}
+                      onChange={(event) =>
+                        setQueueDate(
+                          event.target.value ||
+                          new Date().toLocaleDateString("en-CA")
+                        )
+                      }
+                  />
                     </label>
                     {queueDate !== new Date().toLocaleDateString("en-CA") && (
-                      <small>Historical records are read-only.</small>
+                     <small>Future and historical queue records are read-only.</small>
                     )}
                   </div>
 
@@ -2294,7 +2299,13 @@ useEffect(() => {
                   <button
                     className="btn btn-outline"
                     onClick={resumeQueue}
-                    disabled={!selectedBusinessId || !queuePauseSupported || !queuePaused || Boolean(queueActionLoading)}
+                    disabled={
+                    !selectedBusinessId ||
+                    !isTodayQueue ||
+                    !queuePauseSupported ||
+                    !queuePaused ||
+                    Boolean(queueActionLoading)
+                  }
                   >
                     {!queuePauseSupported
                       ? "Resume unavailable"
@@ -2360,14 +2371,14 @@ useEffect(() => {
                               <div className="row-actions">
                                 <button
                                   onClick={() => queueAction(q.id, "skip")}
-                                  disabled={Boolean(queueActionLoading)}
+                                  disabled={!isTodayQueue || Boolean(queueActionLoading)}
                                 >
                                   Skip
                                 </button>
                                 <button
                                   className="danger-action"
                                   onClick={() => queueAction(q.id, "cancel")}
-                                  disabled={Boolean(queueActionLoading)}
+                                  disabled={!isTodayQueue || Boolean(queueActionLoading)}
                                 >
                                   Cancel
                                 </button>
@@ -2431,7 +2442,12 @@ useEffect(() => {
                     <button
                       className="btn btn-outline"
                       onClick={queuePaused ? resumeQueue : pauseQueue}
-                      disabled={!selectedBusinessId || !queuePauseSupported || Boolean(queueActionLoading)}
+                      disabled={
+                      !selectedBusinessId ||
+                      !isTodayQueue ||
+                      !queuePauseSupported ||
+                      Boolean(queueActionLoading)
+                    }
                     >
                       {!queuePauseSupported
                         ? "Pause control unavailable"
