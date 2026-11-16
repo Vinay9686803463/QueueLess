@@ -246,6 +246,9 @@ const [customerToken, setCustomerToken] = useState(
   const [adminServices, setAdminServices] = useState([]);
   const [adminAppointments, setAdminAppointments] = useState([]);
   const [queue, setQueue] = useState([]);
+  const [queueDate, setQueueDate] = useState(
+    () => new Date().toLocaleDateString("en-CA")
+  );
   const [queuePaused, setQueuePaused] = useState(false);
   const [queuePauseSupported, setQueuePauseSupported] = useState(true);
   const [businessesLoading, setBusinessesLoading] = useState(false);
@@ -793,7 +796,11 @@ useEffect(() => {
     try {
       const [svc, q, appointments] = await Promise.all([
         api(`/businesses/${businessId}/services`, {}, authToken),
-        api(`/businesses/${businessId}/queue`, {}, authToken),
+        api(
+          `/businesses/${businessId}/queue?date=${encodeURIComponent(queueDate)}`,
+          {},
+          authToken
+        ),
         api("/appointments", {}, authToken),
       ]);
 
@@ -847,7 +854,7 @@ useEffect(() => {
       setDashboardLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBusinessId, token]);
+  }, [selectedBusinessId, token, queueDate]);
 
   useEffect(() => {
     if (!selectedBusinessId || !token) return undefined;
@@ -857,7 +864,7 @@ useEffect(() => {
     );
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBusinessId, token]);
+  }, [selectedBusinessId, token, queueDate]);
 
   const loadQueue = async () => {
     if (!selectedBusinessId || refreshing) return;
@@ -872,6 +879,11 @@ useEffect(() => {
 
   const performQueueAction = async (actionKey, requestPath, successMessage) => {
     if (!selectedBusinessId || queueMutationInFlight.current) return;
+
+    if (queueDate !== new Date().toLocaleDateString("en-CA")) {
+      notify("Historical queue records are read-only. Select today's date to manage the live queue.");
+      return;
+    }
     queueMutationInFlight.current = true;
     setQueueActionLoading(actionKey);
     try {
@@ -2104,7 +2116,11 @@ useEffect(() => {
               <StatCard
                 label="Total queue entries"
                 value={queue.length}
-                detail="Today's queue records"
+                detail={
+                  queueDate === new Date().toLocaleDateString("en-CA")
+                    ? "Today's queue records"
+                    : `Records for ${queueDate}`
+                }
                 icon="▤"
               />
               <StatCard
@@ -2122,7 +2138,11 @@ useEffect(() => {
               <StatCard
                 label="Completed customers"
                 value={completedCount}
-                detail="Completed today"
+                detail={
+                  queueDate === new Date().toLocaleDateString("en-CA")
+                    ? "Completed today"
+                    : `Completed on ${queueDate}`
+                }
                 icon="✓"
               />
               <StatCard
@@ -2147,11 +2167,34 @@ useEffect(() => {
               <div className="dashboard-panel queue-panel" id="queue">
                 <div className="panel-heading">
                   <div>
-                    <h2>Live waiting list</h2>
+                    <h2>
+                      {queueDate === new Date().toLocaleDateString("en-CA")
+                        ? "Live waiting list"
+                        : "Queue history"}
+                    </h2>
                     <p>
                       {selectedBusiness?.business_name ||
                         "Select a business to view its queue"}
                     </p>
+                    <label htmlFor="queueDateFilter">
+                      View queue date
+                      <input
+                        id="queueDateFilter"
+                        type="date"
+                        className="input"
+                        value={queueDate}
+                        max={new Date().toLocaleDateString("en-CA")}
+                        onChange={(event) =>
+                          setQueueDate(
+                            event.target.value ||
+                            new Date().toLocaleDateString("en-CA")
+                          )
+                        }
+                      />
+                    </label>
+                    {queueDate !== new Date().toLocaleDateString("en-CA") && (
+                      <small>Historical records are read-only.</small>
+                    )}
                   </div>
 
                   <span
