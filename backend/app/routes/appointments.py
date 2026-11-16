@@ -1,5 +1,6 @@
 import uuid as uuid_lib
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import Blueprint, request, jsonify, g, current_app
 from sqlalchemy import text, bindparam
@@ -174,7 +175,6 @@ def check_booking_conflict(business_id, service_id, scheduled_at, duration_minut
             FROM appointments a
             JOIN services s ON s.id = a.service_id
             WHERE a.business_id = :business_id
-              AND a.service_id = :service_id
               AND a.status NOT IN ('cancelled', 'no_show')
               AND (:exclude_id IS NULL OR a.id <> :exclude_id)
         """),
@@ -207,12 +207,16 @@ def check_booking_conflict(business_id, service_id, scheduled_at, duration_minut
 def validate_business_hours(business, scheduled_at, duration_minutes):
     opening = business.get("opening_time")
     closing = business.get("closing_time")
-
+    try:
+        local_dt = scheduled_at.astimezone(ZoneInfo(business.get("timezone") or "UTC"))
+    except ZoneInfoNotFoundError:
+        return "Business timezone is invalid"
+    working_days = business.get("working_days")
+    if working_days is not None and local_dt.weekday() not in working_days:
+        return "Business is closed on this day"
     if opening is None and closing is None:
         return None
-
-    local_dt = scheduled_at.astimezone(timezone.utc)
-    start_time = local_dt.timetz().replace(tzinfo=None) if False else local_dt.time()
+    start_time = local_dt.timetz().replace(tzinfo=None)
     end_dt = local_dt + timedelta(minutes=duration_minutes)
     end_time = end_dt.time()
 
@@ -289,6 +293,8 @@ def create_appointment():
                     id::text AS id,
                     opening_time,
                     closing_time,
+                    working_days,
+                    timezone,
                     is_active
                 FROM businesses
                 WHERE id = :business_id
@@ -585,6 +591,8 @@ def update_appointment(appointment_id):
                     id::text AS id,
                     opening_time,
                     closing_time,
+                    working_days,
+                    timezone,
                     is_active
                 FROM businesses
                 WHERE id = :business_id

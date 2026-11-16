@@ -95,6 +95,29 @@ select {
   gap: 12px;
 }
 
+.profile-menu { position: relative; }
+.profile-trigger, .profile-avatar { display: grid; place-items: center; width: 42px; height: 42px; border: 0; border-radius: 50%; background: #137f82; color: white; font-weight: 800; }
+.profile-dropdown { position: absolute; z-index: 40; top: calc(100% + 12px); right: 0; width: min(330px, calc(100vw - 24px)); padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); box-shadow: 0 18px 48px #122c3c2b; }
+.profile-identity { display: flex; align-items: center; gap: 12px; padding-bottom: 15px; border-bottom: 1px solid var(--line); }
+.profile-identity > div { min-width: 0; display: grid; gap: 3px; }
+.profile-identity strong, .profile-identity small { overflow-wrap: anywhere; }
+.profile-identity small { color: var(--muted); font-size: 12px; }
+.profile-appearance { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 0; }
+.profile-appearance div { display: flex; padding: 3px; border-radius: 9px; background: var(--page); }
+.profile-appearance button { border: 0; border-radius: 7px; padding: 7px 10px; background: transparent; color: var(--ink); }
+.profile-appearance button[aria-pressed="true"] { background: #137f82; color: white; }
+.profile-logout { width: 100%; padding: 10px; border: 0; border-radius: 8px; background: #fff0f0; color: #a63838; font-weight: 700; }
+
+html[data-theme="dark"] { color-scheme: dark; }
+html[data-theme="dark"] body, html[data-theme="dark"] .app-shell { --ink: #e6edf3; --muted: #a8b6c2; --line: #33424d; --surface: #1c2933; --page: #111a21; background: var(--page); color: var(--ink); }
+html[data-theme="dark"] .topbar, html[data-theme="dark"] .admin-sidebar, html[data-theme="dark"] .login-card, html[data-theme="dark"] .customer-account-panel, html[data-theme="dark"] .checkin-card, html[data-theme="dark"] .stat-card, html[data-theme="dark"] .admin-panel, html[data-theme="dark"] .customer-record-panel, html[data-theme="dark"] .service-card, html[data-theme="dark"] .modal-content { background: var(--surface); color: var(--ink); border-color: var(--line); }
+html[data-theme="dark"] .input, html[data-theme="dark"] input, html[data-theme="dark"] select, html[data-theme="dark"] textarea { background: #14212a; color: var(--ink); border-color: var(--line); }
+html[data-theme="dark"] .btn-outline, html[data-theme="dark"] .btn-switch { background: #263740; color: var(--ink); border-color: var(--line); }
+html[data-theme="dark"] .customer-page, html[data-theme="dark"] .admin-main, html[data-theme="dark"] .admin-content { color: var(--ink); }
+html[data-theme="dark"] .connection-pill, html[data-theme="dark"] .profile-appearance div { background: #263740; color: var(--ink); }
+html[data-theme="dark"] .admin-record, html[data-theme="dark"] .customer-record, html[data-theme="dark"] .table-row { background: #18252e; border-color: var(--line); color: var(--ink); }
+@media (max-width: 600px) { .profile-dropdown { right: -4px; } .topbar { padding-inline: 14px; } .connection-pill { display: none; } }
+
 .connection-pill {
   display: inline-flex;
   align-items: center;
@@ -3791,3 +3814,69 @@ select {
     flex-direction: column;
   }
 }
+
+/* Dark appearance uses a near-black canvas across every portal and dashboard. */
+html[data-theme="dark"],
+html[data-theme="dark"] body,
+html[data-theme="dark"] #root,
+html[data-theme="dark"] .app-shell,
+html[data-theme="dark"] .customer-page,
+html[data-theme="dark"] .admin-layout,
+html[data-theme="dark"] .admin-main,
+html[data-theme="dark"] .admin-content,
+html[data-theme="dark"] .login-page,
+html[data-theme="dark"] .customer-login-page {
+  --ink: #f1f5f9;
+  --muted: #a9b4c0;
+  --line: #30343b;
+  --surface: #0b0b0d;
+  --page: #000;
+  background: #000 !important;
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .topbar,
+html[data-theme="dark"] .admin-sidebar,
+html[data-theme="dark"] .login-card,
+html[data-theme="dark"] .customer-account-panel,
+html[data-theme="dark"] .checkin-card,
+html[data-theme="dark"] .stat-card,
+html[data-theme="dark"] .dashboard-panel,
+html[data-theme="dark"] .admin-panel,
+html[data-theme="dark"] .customer-record-panel,
+html[data-theme="dark"] .service-card,
+html[data-theme="dark"] .profile-dropdown,
+html[data-theme="dark"] .profile-identity,
+html[data-theme="dark"] .admin-record,
+html[data-theme="dark"] .customer-record,
+html[data-theme="dark"] .customer-account,
+html[data-theme="dark"] .admin-card,
+html[data-theme="dark"] .business-card,
+html[data-theme="dark"] .modal-content {
+  background: #0b0b0d !important;
+  color: #f1f5f9 !important;
+  border-color: #30343b !important;
+}
+
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] .input,
+html[data-theme="dark"] table,
+html[data-theme="dark"] th,
+html[data-theme="dark"] td {
+  background-color: #111114 !important;
+  color: #f1f5f9 !important;
+  border-color: #363a42 !important;
+}
+
+html[data-theme="dark"] .topbar { background-image: none !important; }
+html[data-theme="dark"] .customer-hero-art,
+html[data-theme="dark"] .login-art,
+html[data-theme="dark"] .admin-hero,
+html[data-theme="dark"] .admin-brand-panel { background-color: #050505; }
+html[data-theme="dark"] .muted-empty,
+html[data-theme="dark"] .customer-account-description,
+html[data-theme="dark"] .admin-record span,
+html[data-theme="dark"] .customer-record span { color: #a9b4c0; }
+html[data-theme="dark"] .profile-appearance button[aria-pressed="true"] { background: #137f82 !important; color: #fff !important; }

@@ -38,7 +38,9 @@ def get_public_business(slug):
                         id::text AS id,
                         business_name,
                         business_type,
-                        address
+                        description,
+                        address,
+                        phone
                     FROM businesses
                     WHERE is_active = TRUE
                       AND id = :business_id
@@ -53,7 +55,9 @@ def get_public_business(slug):
                         id::text AS id,
                         business_name,
                         business_type,
-                        address
+                        description,
+                        address,
+                        phone
                     FROM businesses
                     WHERE is_active = TRUE
                       AND lower(trim(both '-' from regexp_replace(
@@ -134,7 +138,9 @@ def get_public_business_services(slug):
                 SELECT
                     id::text AS id,
                     service_name,
-                    duration_minutes
+                    description,
+                    duration_minutes,
+                    price
                 FROM services
                 WHERE business_id = :business_id
                   AND is_active = TRUE

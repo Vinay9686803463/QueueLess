@@ -48,6 +48,10 @@ CREATE TABLE IF NOT EXISTS businesses (
     opening_time TIME,
     closing_time TIME,
 
+    working_days SMALLINT[] NOT NULL DEFAULT ARRAY[0,1,2,3,4]::SMALLINT[],
+    timezone VARCHAR(64) NOT NULL DEFAULT 'UTC',
+    booking_interval_minutes INTEGER NOT NULL DEFAULT 15 CHECK (booking_interval_minutes > 0),
+
     average_service_time INTEGER NOT NULL DEFAULT 15
         CHECK (average_service_time > 0),
 
