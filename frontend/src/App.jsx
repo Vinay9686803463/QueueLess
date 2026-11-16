@@ -2633,14 +2633,14 @@ if (queueDate !== new Date().toLocaleDateString("en-CA")) {
                       <button
                         type="button"
                         onClick={() => queueAction(item.id, "complete")}
-                        disabled={Boolean(queueActionLoading)}
+                        disabled={!isTodayQueue || Boolean(queueActionLoading)}
                       >
                         {queueActionLoading === `complete-${item.id}` ? "Completing..." : "Complete Service"}
                       </button>
                       <button
                         type="button"
                         onClick={() => queueAction(item.id, "skip")}
-                        disabled={Boolean(queueActionLoading)}
+                        disabled={!isTodayQueue || Boolean(queueActionLoading)}
                       >
                         Skip
                       </button>
@@ -2648,7 +2648,7 @@ if (queueDate !== new Date().toLocaleDateString("en-CA")) {
                         type="button"
                         className="danger-action"
                         onClick={() => queueAction(item.id, "cancel")}
-                        disabled={Boolean(queueActionLoading)}
+                        disabled={!isTodayQueue || Boolean(queueActionLoading)}
                       >
                         Cancel Entry
                       </button>
