@@ -617,6 +617,20 @@ def get_queue(business_id):
         return jsonify({"status": "error", "message": "Business not found"}), 404
 
     today = queue_date_today()
+    requested_date = request.args.get("date")
+
+    if requested_date:
+        try:
+            selected_date = datetime.strptime(
+                requested_date, "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            return jsonify({
+                "status": "error",
+                "message": "Invalid queue date. Use YYYY-MM-DD.",
+            }), 400
+    else:
+        selected_date = today
 
     try:
         rows = db.session.execute(
@@ -647,7 +661,7 @@ def get_queue(business_id):
                   AND qt.queue_date = :queue_date
                 ORDER BY qt.token_number ASC
             """),
-            {"business_id": business_id, "queue_date": today},
+            {"business_id": business_id, "queue_date": selected_date},
         ).mappings().all()
 
         waiting = []
@@ -678,7 +692,7 @@ def get_queue(business_id):
         return jsonify({
             "status": "success",
             "business_id": business_id,
-            "queue_date": today.isoformat(),
+            "queue_date": selected_date.isoformat(),
             "queue_paused": (
                 _is_queue_paused(business_id) if queue_pause_supported else False
             ),
