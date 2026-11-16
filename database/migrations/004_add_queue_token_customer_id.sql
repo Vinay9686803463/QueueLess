@@ -1,0 +1,7 @@
+BEGIN;
+
+ALTER TABLE queue_tokens
+    ADD COLUMN IF NOT EXISTS customer_id UUID
+    REFERENCES customers(id) ON DELETE SET NULL;
+
+COMMIT;

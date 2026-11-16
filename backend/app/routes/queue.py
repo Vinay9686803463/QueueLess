@@ -763,7 +763,7 @@ def seed_demo_queue(business_id):
                 FOR UPDATE
             """),
             {"business_id": business_id},
-        ).first()
+        ).mappings().first()
         if not business:
             db.session.rollback()
             return jsonify({"status": "error", "message": "Business not found"}), 404
