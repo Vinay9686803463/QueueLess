@@ -12,7 +12,7 @@ def replace_once(source, old, new, label):
     count = source.count(old)
     if count != 1:
         raise RuntimeError(
-            f"{label}: expected 1 match, found {count}. "
+             f"{label}: expected 1 match, found {count}. "
             "No application files have been written."
         )
     return source.replace(old, new, 1)
