@@ -152,6 +152,7 @@ CREATE TABLE IF NOT EXISTS appointments (
     customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
 
     scheduled_at TIMESTAMPTZ NOT NULL,
+    duration_minutes INTEGER CHECK (duration_minutes IS NULL OR duration_minutes > 0),
 
     status VARCHAR(20) NOT NULL DEFAULT 'booked'
         CHECK (
@@ -173,6 +174,10 @@ CREATE TABLE IF NOT EXISTS appointments (
 
 ALTER TABLE appointments
 ADD COLUMN IF NOT EXISTS customer_id UUID REFERENCES customers(id) ON DELETE SET NULL;
+
+ALTER TABLE appointments
+ADD COLUMN IF NOT EXISTS duration_minutes INTEGER
+    CHECK (duration_minutes IS NULL OR duration_minutes > 0);
 
 CREATE INDEX IF NOT EXISTS idx_appointments_business
 ON appointments(business_id);

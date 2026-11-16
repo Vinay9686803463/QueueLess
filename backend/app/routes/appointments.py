@@ -55,6 +55,7 @@ def get_appointment_columns():
         customer_email,
         customer_id::text AS customer_id,
         scheduled_at,
+        duration_minutes,
         status,
         notes,
         created_at,
@@ -171,7 +172,7 @@ def check_booking_conflict(business_id, service_id, scheduled_at, duration_minut
             SELECT
                 a.id::text AS id,
                 a.scheduled_at,
-                s.duration_minutes
+                COALESCE(a.duration_minutes, s.duration_minutes) AS duration_minutes
             FROM appointments a
             JOIN services s ON s.id = a.service_id
             WHERE a.business_id = :business_id

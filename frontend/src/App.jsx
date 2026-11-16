@@ -815,11 +815,11 @@ useEffect(() => {
       const list = data.businesses || [];
 
       setBusinesses(list);
-      setSelectedBusinessId((current) =>
-        list.some((item) => String(item.id) === String(current))
-          ? current
-          : list[0]?.id || ""
-      );
+      const nextSelectedId = list.some((item) => String(item.id) === String(selectedBusinessIdRef.current))
+        ? selectedBusinessIdRef.current
+        : list[0]?.id || "";
+      selectedBusinessIdRef.current = nextSelectedId;
+      setSelectedBusinessId(nextSelectedId);
       if (!list.length) {
         setQueue([]);
         setQueuePaused(false);
@@ -827,11 +827,25 @@ useEffect(() => {
         setAdminServices([]);
         setAdminAppointments([]);
       }
+      if (import.meta.env.DEV && list.length) {
+        await Promise.allSettled(list.filter((item) => item.is_active !== false).map((item) => seedDemoBusiness(item.id, token)));
+        if (nextSelectedId) await loadBusinessData(nextSelectedId, token, { quiet: true });
+      }
     } catch (err) {
       setBusinessesError(err.message);
       notify(err.message);
     } finally {
       setBusinessesLoading(false);
+    }
+  };
+
+  const seedDemoBusiness = async (businessId, authToken = token) => {
+    if (!import.meta.env.DEV || !businessId) return null;
+    try {
+      return await api(`/businesses/${businessId}/queue/demo`, { method: "POST" }, authToken);
+    } catch (error) {
+      if (!/active service/i.test(error.message)) notify(error.message);
+      return null;
     }
   };
 
@@ -1039,6 +1053,10 @@ useEffect(() => {
       });
       setEditingServiceId("");
       await loadBusinessData(selectedBusinessId);
+      if (import.meta.env.DEV && payload.is_active !== false) {
+        await seedDemoBusiness(selectedBusinessId);
+        await loadBusinessData(selectedBusinessId, token, { quiet: true });
+      }
       notify(wasEditing ? "Service updated" : "Service created");
     } catch (err) {
       notify(err.message);
@@ -1060,6 +1078,10 @@ useEffect(() => {
         token
       );
       await loadBusinessData(selectedBusinessId);
+      if (import.meta.env.DEV && !service.is_active) {
+        await seedDemoBusiness(selectedBusinessId);
+        await loadBusinessData(selectedBusinessId, token, { quiet: true });
+      }
       notify(service.is_active ? "Service deactivated" : "Service activated");
     } catch (err) {
       notify(err.message);
@@ -2280,14 +2302,6 @@ useEffect(() => {
                   </button>
                   {import.meta.env.DEV && (
                     <>
-                      <button
-                        className="btn btn-demo"
-                        type="button"
-                        onClick={() => runDemoQueueAction("POST")}
-                        disabled={!selectedBusinessId || demoActionLoading}
-                      >
-                        {demoActionLoading ? "Working..." : "Generate 12 Demo Customers"}
-                      </button>
                       <button
                         className="btn btn-outline"
                         type="button"
