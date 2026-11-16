@@ -221,6 +221,9 @@ function getQueueRows(data) {
 }
 
 export default function App() {
+  const [theme, setTheme] = useState(() => localStorage.getItem("queueless_theme") || (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef(null);
   const [role, setRole] = useState(
     () => sessionStorage.getItem("queueless_portal") === "admin" ? "admin" : "customer"
   );
@@ -229,18 +232,19 @@ export default function App() {
 const [token, setToken] = useState(
   () => localStorage.getItem("queueless_token") || ""
 );
+const adminTokenRef = useRef(localStorage.getItem("queueless_token") || "");
+const restoredAdminSession = useRef(Boolean(localStorage.getItem("queueless_token")));
 
 const [customerToken, setCustomerToken] = useState(
   () => localStorage.getItem("queueless_customer_token") || ""
 );
+const customerTokenRef = useRef(localStorage.getItem("queueless_customer_token") || "");
+const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_customer_token")));
   const [customerProfile, setCustomerProfile] = useState(null);
   const [customerAppointments, setCustomerAppointments] = useState([]);
   const [customerTokens, setCustomerTokens] = useState([]);
   const [currentTime, setCurrentTime] = useState(0);
 
-  const [businessSlug, setBusinessSlug] = useState(
-    () => import.meta.env.VITE_DEFAULT_BUSINESS_SLUG || ""
-  );
   const [business, setBusiness] = useState(null);
   const [publicServices, setPublicServices] = useState([]);
   const [adminServices, setAdminServices] = useState([]);
@@ -304,6 +308,10 @@ const [customerToken, setCustomerToken] = useState(
   const [mode, setMode] = useState("appointment");
 
   const [businesses, setBusinesses] = useState([]);
+  const [publicBusinesses, setPublicBusinesses] = useState([]);
+  const [availabilitySlots, setAvailabilitySlots] = useState([]);
+  const [appointmentDate, setAppointmentDate] = useState("");
+  const [adminProfile, setAdminProfile] = useState(null);
   const [selectedBusinessId, setSelectedBusinessId] = useState("");
   const [serviceForm, setServiceForm] = useState({
     service_name: "",
@@ -312,6 +320,44 @@ const [customerToken, setCustomerToken] = useState(
     price: "0",
   });
   const [editingServiceId, setEditingServiceId] = useState("");
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("queueless_theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
+    const outside = (event) => { if (!profileRef.current?.contains(event.target)) setProfileOpen(false); };
+    const escape = (event) => { if (event.key === "Escape") setProfileOpen(false); };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
+  }, []);
+
+  useEffect(() => {
+    if (!token) { setAdminProfile(null); return; }
+    if (adminProfile || !restoredAdminSession.current) return;
+    let active = true;
+    api("/auth/me", {}, token).then((data) => { if (active) setAdminProfile(data.user || null); }).catch(() => { if (active && adminTokenRef.current === token) { setAdminProfile(null); setToken(""); adminTokenRef.current = ""; } });
+    return () => { active = false; };
+  }, [token, adminProfile]);
+
+  useEffect(() => {
+    if (!customerToken || customerProfile || !restoredCustomerSession.current) return;
+    let active = true;
+    api("/customer-auth/me", {}, customerToken).then((data) => { if (active) setCustomerProfile(data.customer || null); }).catch(() => { if (active && customerTokenRef.current === customerToken) { setCustomerProfile(null); setCustomerToken(""); customerTokenRef.current = ""; } });
+    return () => { active = false; };
+  }, [customerToken, customerProfile]);
+
+  useEffect(() => {
+    api("/public/businesses").then((data) => setPublicBusinesses(data.businesses || [])).catch(() => setPublicBusinesses([]));
+  }, []);
+
+  useEffect(() => {
+    if (mode !== "appointment" || !business?.id || !selectedService || !appointmentDate) { setAvailabilitySlots([]); return; }
+    api(`/public/availability?business_id=${encodeURIComponent(business.id)}&service_id=${encodeURIComponent(selectedService)}&date=${encodeURIComponent(appointmentDate)}`)
+      .then((data) => setAvailabilitySlots(data.slots || [])).catch((error) => { setAvailabilitySlots([]); setNotice(error.message); });
+  }, [business?.id, selectedService, appointmentDate, mode]);
 
   useEffect(() => {
     selectedBusinessIdRef.current = selectedBusinessId;
@@ -495,8 +541,10 @@ useEffect(() => {
         }),
       });
       if (role === "admin") {
+        adminTokenRef.current = "";
         setToken("");
       } else {
+        customerTokenRef.current = "";
         setCustomerToken("");
         setCustomerAppointments([]);
         setCustomerTokens([]);
@@ -520,18 +568,18 @@ useEffect(() => {
     }
   };
 
-  const loadPublicBusiness = async () => {
+  const selectPublicBusiness = async (businessId) => {
     try {
-      const biz = await api(`/public/business/${businessSlug}`);
-      setBusiness(biz.business);
-
-      const svc = await api(`/public/business/${businessSlug}/services`);
+      const item = publicBusinesses.find((entry) => String(entry.id) === String(businessId));
+      if (!item) return;
+      const [svc, details] = await Promise.all([
+        api(`/public/businesses/${businessId}/services`),
+        api(`/public/business/${businessId}`),
+      ]);
+      setBusiness(details.business || item);
       setPublicServices(svc.services || []);
-
-      notify("Business loaded successfully");
-    } catch (err) {
-      notify(err.message);
-    }
+      setSelectedService(""); setAppointmentTime(""); setAppointmentDate(""); setBooking(null);
+    } catch (error) { notify(error.message); }
   };
 
   const createBooking = async (e) => {
@@ -549,7 +597,7 @@ useEffect(() => {
       let data;
 
       if (mode === "appointment") {
-        payload.appointment_time = appointmentTime;
+          payload.scheduled_at = appointmentTime;
 
         data = await api(
           "/public/bookings",
@@ -604,6 +652,7 @@ useEffect(() => {
     setAdminLoginLoading(true);
     setAdminLoginError("");
     setToken("");
+    adminTokenRef.current = "";
 
     try {
       const data = await api("/auth/login", {
@@ -614,10 +663,13 @@ useEffect(() => {
       if (!data.access_token) {
         throw new Error("Unable to sign in right now. Please try again.");
       }
+      setAdminProfile(data.user || { full_name: email, email });
+      adminTokenRef.current = data.access_token;
       setToken(data.access_token);
       notify("Login successful");
     } catch (err) {
       setToken("");
+      adminTokenRef.current = "";
       setAdminLoginError(loginErrorMessage(err));
     } finally {
       adminLoginInFlight.current = false;
@@ -636,6 +688,8 @@ useEffect(() => {
         method: "POST",
         body: JSON.stringify({ full_name: regName, email: regEmail, password: regPassword }),
       });
+      setAdminProfile(data.user || { full_name: regName, email: regEmail });
+      adminTokenRef.current = data.access_token;
       setToken(data.access_token);
       notify("Registration successful");
       setShowRegister(false);
@@ -669,6 +723,7 @@ useEffect(() => {
     setCustomerLoginLoading(true);
     setCustomerLoginError("");
     setCustomerToken("");
+    customerTokenRef.current = "";
     setCustomerAppointments([]);
     setCustomerTokens([]);
 
@@ -677,9 +732,10 @@ useEffect(() => {
       if (!data.access_token) {
         throw new Error("Unable to sign in right now. Please try again.");
       }
-      setCustomerProfile(data.customer || null);
+      setCustomerProfile(data.customer || { full_name: customerName, email: customerEmail, phone: customerPhone });
       setCustomerName(data.customer?.full_name || "");
       setCustomerPhone(data.customer?.phone || "");
+      customerTokenRef.current = data.access_token;
       setCustomerToken(data.access_token);
       notify("Customer login successful");
       try {
@@ -689,6 +745,7 @@ useEffect(() => {
       }
     } catch (err) {
       setCustomerToken("");
+      customerTokenRef.current = "";
       setCustomerLoginError(loginErrorMessage(err));
     } finally {
       customerLoginInFlight.current = false;
@@ -700,7 +757,8 @@ useEffect(() => {
     e.preventDefault();
     try {
       const data = await api("/customer-auth/register", { method: "POST", body: JSON.stringify({ full_name: customerName, email: customerEmail, phone: customerPhone, password: customerPassword }) });
-      setCustomerProfile(data.customer || null);
+      setCustomerProfile(data.customer || { full_name: customerName, email: customerEmail, phone: customerPhone });
+      customerTokenRef.current = data.access_token;
       setCustomerToken(data.access_token);
       notify("Customer registration successful");
       try {
@@ -715,6 +773,7 @@ useEffect(() => {
 
   const customerLogout = () => {
     setCustomerToken("");
+    customerTokenRef.current = "";
     setCustomerProfile(null);
     setCustomerAppointments([]);
     setCustomerTokens([]);
@@ -728,6 +787,7 @@ useEffect(() => {
   const logout = () => {
     businessLoadRequest.current += 1;
     setToken("");
+    adminTokenRef.current = "";
     setBusinesses([]);
     setSelectedBusinessId("");
     setQueue([]);
@@ -1164,14 +1224,17 @@ useEffect(() => {
               : "Switch to Customer Portal"}
           </button>
 
-          {((role === "admin" && token) ||
-            (role === "customer" && customerToken)) && (
-            <button
-              className="btn btn-logout"
-              onClick={role === "admin" ? logout : customerLogout}
-            >
-              Logout
-            </button>
+          {((role === "admin" && token) || (role === "customer" && customerToken)) && (
+            <div className="profile-menu" ref={profileRef}>
+              <button className="profile-trigger" type="button" aria-label="Open account menu" aria-expanded={profileOpen} onClick={() => setProfileOpen((open) => !open)}>
+                {(role === "admin" ? adminProfile?.full_name : customerProfile?.full_name)?.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase() || "U"}
+              </button>
+              {profileOpen && <section className="profile-dropdown" aria-label="Account menu">
+                <div className="profile-identity"><span className="profile-avatar">{(role === "admin" ? adminProfile?.full_name : customerProfile?.full_name)?.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase() || "U"}</span><div><strong>{role === "admin" ? adminProfile?.full_name : customerProfile?.full_name}</strong><small>{role === "admin" ? adminProfile?.email : customerProfile?.email}</small><small>{role === "admin" ? `Admin${selectedBusiness?.business_name ? ` · ${selectedBusiness.business_name}` : ""}` : "Customer"}</small></div></div>
+                <div className="profile-appearance"><strong>Appearance</strong><div role="group" aria-label="Appearance"><button type="button" aria-pressed={theme === "light"} onClick={() => setTheme("light")}>Light</button><button type="button" aria-pressed={theme === "dark"} onClick={() => setTheme("dark")}>Dark</button></div></div>
+                <button className="profile-logout" type="button" onClick={() => { setProfileOpen(false); role === "admin" ? logout() : customerLogout(); }}>Log out</button>
+              </section>}
+            </div>
           )}
         </div>
       </header>
@@ -1542,25 +1605,12 @@ useEffect(() => {
               </div>
 
               <div className="business-loader">
-                <label htmlFor="businessSlug">
-                  Business code
-                </label>
-                <div className="business-loader-row">
-                  <input
-                    id="businessSlug"
-                    className="input"
-                    value={businessSlug}
-                    onChange={(e) => setBusinessSlug(e.target.value)}
-                    placeholder="Enter business code"
-                  />
-                  <button
-                    className="btn btn-purple"
-                    type="button"
-                    onClick={loadPublicBusiness}
-                  >
-                    Load
-                  </button>
-                </div>
+                <label htmlFor="publicBusiness">Choose a business</label>
+                <select id="publicBusiness" className="input" value={business?.id || ""} onChange={(event) => selectPublicBusiness(event.target.value)}>
+                  <option value="">{publicBusinesses.length ? "Select an active business" : "No active businesses available"}</option>
+                  {publicBusinesses.map((item) => <option key={item.id} value={item.id}>{item.business_name} · {item.business_type}</option>)}
+                </select>
+                {businessesLoading && <small>Loading businesses…</small>}
 
                 {business && (
                   <div className="loaded-business">
@@ -1570,6 +1620,7 @@ useEffect(() => {
                       <small>
                         {business.business_type || "Business loaded"}
                       </small>
+                      {business.description && <small>{business.description}</small>}
                     </div>
                   </div>
                 )}
@@ -1588,7 +1639,7 @@ useEffect(() => {
                     <option value="">Choose a service</option>
                     {publicServices.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.service_name} ({s.duration_minutes} min)
+                        {s.service_name} ({s.duration_minutes} min · {Number(s.price || 0).toFixed(2)})
                       </option>
                     ))}
                   </select>
@@ -1648,23 +1699,15 @@ useEffect(() => {
                   </select>
                 </div>
 
-                {mode === "appointment" && (
-                  <div className="field">
-                    <label htmlFor="appointmentTime">
-                      Appointment date and time
-                    </label>
-                    <input
-                      id="appointmentTime"
-                      className="input"
-                      type="datetime-local"
-                      value={appointmentTime}
-                      onChange={(e) =>
-                        setAppointmentTime(e.target.value)
-                      }
-                      required
-                    />
-                  </div>
-                )}
+                {mode === "appointment" && <div className="field">
+                  <label htmlFor="appointmentDate">Available appointment date</label>
+                  <input id="appointmentDate" className="input" type="date" min={new Date().toISOString().slice(0, 10)} value={appointmentDate} onChange={(event) => { setAppointmentDate(event.target.value); setAppointmentTime(""); }} required />
+                  <label htmlFor="appointmentTime">Available time · {publicServices.find((service) => String(service.id) === String(selectedService))?.duration_minutes || 0} min</label>
+                  <select id="appointmentTime" className="input" value={appointmentTime} onChange={(event) => setAppointmentTime(event.target.value)} required>
+                    <option value="">{appointmentDate ? (availabilitySlots.length ? "Choose an available time" : "No available times for this date") : "Choose a date first"}</option>
+                    {availabilitySlots.map((slot) => <option key={slot.start} value={slot.start}>{slot.label}</option>)}
+                  </select>
+                </div>}
 
                 <button
                   className="btn btn-purple submit-checkin"
