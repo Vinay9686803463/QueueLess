@@ -51,6 +51,7 @@ os.environ["DATABASE_URL"] = database_url.render_as_string(
 )
 os.environ["FLASK_ENV"] = "development"
 os.environ["QUEUELESS_ENABLE_DEMO_DATA"] = "true"
+database="queueless_dev",
 
 print("LOCAL DEMO ENVIRONMENT")
 print("Database: queueless_dev")
