@@ -1675,7 +1675,6 @@ if (queueDate !== new Date().toLocaleDateString("en-CA")) {
                     placeholder="Enter your full name"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    readOnly={Boolean(customerToken)}
                     required
                   />
                 </div>
@@ -1689,7 +1688,6 @@ if (queueDate !== new Date().toLocaleDateString("en-CA")) {
                       placeholder="Phone number"
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
-                      readOnly={Boolean(customerToken && customerProfile?.phone)}
                       required
                     />
                   </div>
@@ -1703,7 +1701,6 @@ if (queueDate !== new Date().toLocaleDateString("en-CA")) {
                       placeholder="Email (optional)"
                       value={customerEmail}
                       onChange={(e) => setCustomerEmail(e.target.value)}
-                      readOnly={Boolean(customerToken)}
                     />
                   </div>
                 </div>
