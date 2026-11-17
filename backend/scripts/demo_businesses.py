@@ -1,6 +1,6 @@
 import argparse
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 from urllib.parse import urlparse
 
 from sqlalchemy import bindparam, text
@@ -131,6 +131,9 @@ DEMO_CUSTOMER_LAST_NAMES = (
 )
 DEMO_QUEUE_SIZE = 12
 DEMO_BUSINESS_EMAIL_DOMAIN = "queueless.invalid"
+DEMO_OPENING_TIME = time(9, 0)
+DEMO_CLOSING_TIME = time(17, 0)
+
 DEMO_SERVICE_DESCRIPTION_PREFIX = "[QueueLess DEMO] "
 DEMO_TRACKING_PREFIX = "DEMO-"
 
@@ -173,7 +176,8 @@ def _get_or_create_business(db, owner_id, demo_business):
     existing = db.session.execute(
         text("""
             SELECT id::text AS id, owner_id::text AS owner_id,
-                   business_name, business_type, is_active
+                   business_name, business_type, is_active,
+                   opening_time, closing_time
             FROM businesses
             WHERE lower(email) = :email
             FOR UPDATE
@@ -199,17 +203,34 @@ def _get_or_create_business(db, owner_id, demo_business):
                 f"Demo business {demo_business['name']} is inactive; "
                 "no existing business was changed"
             )
+        # Fill only missing hours. Preserve hours configured by an admin.
+        db.session.execute(
+            text("""
+                UPDATE businesses
+                SET opening_time = COALESCE(opening_time, :opening_time),
+                    closing_time = COALESCE(closing_time, :closing_time)
+                WHERE id = :business_id
+                  AND (opening_time IS NULL OR closing_time IS NULL)
+            """),
+            {
+                "business_id": business["id"],
+                "opening_time": DEMO_OPENING_TIME,
+                "closing_time": DEMO_CLOSING_TIME,
+            },
+        )
         return business["id"], False
 
     business_id = db.session.execute(
         text("""
             INSERT INTO businesses (
                 owner_id, business_name, business_type, description,
-                address, phone, email, average_service_time, is_active
+                address, phone, email, average_service_time,
+                opening_time, closing_time, is_active
             )
             VALUES (
                 :owner_id, :business_name, :business_type, :description,
-                :address, :phone, :email, :average_service_time, TRUE
+                :address, :phone, :email, :average_service_time,
+                :opening_time, :closing_time, TRUE
             )
             RETURNING id::text
         """),
@@ -224,6 +245,8 @@ def _get_or_create_business(db, owner_id, demo_business):
             "average_service_time": min(
                 service[2] for service in demo_business["services"]
             ),
+            "opening_time": DEMO_OPENING_TIME,
+            "closing_time": DEMO_CLOSING_TIME,
         },
     ).scalar_one()
     return business_id, True

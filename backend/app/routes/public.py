@@ -134,14 +134,26 @@ def _get_public_business(identifier):
 
 
 @public_bp.route("/businesses", methods=["GET"])
+@public_bp.route("/businesses", methods=["GET"])
 def public_businesses():
     rows = db.session.execute(text("""
-        SELECT id::text AS id, business_name, business_type, description,
-               address, phone, opening_time, closing_time
-        FROM businesses WHERE is_active = TRUE ORDER BY business_name
+        SELECT
+            id::text AS id,
+            business_name,
+            business_type,
+            description,
+            address,
+            phone,
+            opening_time::text AS opening_time,
+            closing_time::text AS closing_time
+        FROM businesses
+        WHERE is_active = TRUE
+        ORDER BY business_name
     """)).mappings().all()
-    return jsonify({"businesses": [dict(row) for row in rows]}), 200
 
+    return jsonify({
+        "businesses": [dict(row) for row in rows]
+    }), 200
 
 @public_bp.route("/businesses/<business_id>/services", methods=["GET"])
 def public_business_services(business_id):
