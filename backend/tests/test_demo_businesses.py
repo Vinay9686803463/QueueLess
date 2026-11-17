@@ -91,6 +91,16 @@ class ExistingDemoDb:
 
             if "FROM businesses" in sql and "lower(email)" in sql:
                 return ExistingRecordResult(mappings=[self.outer.business])
+            if "UPDATE businesses" in sql:
+                self.outer.business["opening_time"] = (
+                    self.outer.business.get("opening_time")
+                    or params["opening_time"]
+                )
+                self.outer.business["closing_time"] = (
+                    self.outer.business.get("closing_time")
+                    or params["closing_time"]
+                )
+                return ExistingRecordResult()
             if "FROM services" in sql and "service_name = :service_name" in sql:
                 service = self.outer.services[params["service_name"]]
                 return ExistingRecordResult(row=service)
@@ -162,6 +172,9 @@ def test_seed_helpers_leave_existing_demo_records_unchanged():
     assert repeated_services_created == 0
     assert queue_created == 0
     assert repeated_queue_created == 0
+    assert str(business["opening_time"]) == "09:00:00"
+    assert str(business["closing_time"]) == "17:00:00"
+    assert any("UPDATE businesses" in statement for statement in db.statements)
     assert not any("INSERT INTO" in statement for statement in db.statements)
 
 
