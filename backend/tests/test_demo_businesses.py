@@ -100,6 +100,7 @@ class ExistingDemoDb:
                     self.outer.business.get("closing_time")
                     or params["closing_time"]
                 )
+                self.outer.business["timezone"] = params["timezone"]
                 return ExistingRecordResult()
             if "FROM services" in sql and "service_name = :service_name" in sql:
                 service = self.outer.services[params["service_name"]]
@@ -174,6 +175,7 @@ def test_seed_helpers_leave_existing_demo_records_unchanged():
     assert repeated_queue_created == 0
     assert str(business["opening_time"]) == "09:00:00"
     assert str(business["closing_time"]) == "17:00:00"
+    assert business["timezone"] == "Asia/Kolkata"
     assert any("UPDATE businesses" in statement for statement in db.statements)
     assert not any("INSERT INTO" in statement for statement in db.statements)
 
