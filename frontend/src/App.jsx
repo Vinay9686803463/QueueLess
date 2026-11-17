@@ -1669,14 +1669,13 @@ if (queueDate !== new Date().toLocaleDateString("en-CA")) {
 
                 <div className="field">
                   <label htmlFor="customerName">Full name</label>
-                  <input
-                    id="customerName"
-                    className="input"
-                    placeholder="Enter your full name"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    required
-                  />
+                 <input
+                  id="customerName"
+                  className="input"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  required
+                />
                 </div>
 
                 <div className="field-row">
@@ -1685,7 +1684,6 @@ if (queueDate !== new Date().toLocaleDateString("en-CA")) {
                     <input
                       id="customerPhone"
                       className="input"
-                      placeholder="Phone number"
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
                       required
