@@ -161,6 +161,8 @@ describe("QueueLess frontend", () => {
     await user.click(screen.getByRole("button", { name: /Continue to check-in/i }));
 
     expect(await screen.findByText(/Appointment ID: appointment-2/)).toBeInTheDocument();
+    expect(screen.getByText(/Appointment time:/)).toBeInTheDocument();
+    expect(screen.queryByText(/Estimated wait: To be confirmed/)).not.toBeInTheDocument();
     await user.type(screen.getByPlaceholderText("Enter tracking code"), "track-code");
     await user.click(screen.getByRole("button", { name: "Track token" }));
     expect(await screen.findByText("YOUR TOKEN")).toBeInTheDocument();
