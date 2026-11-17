@@ -173,6 +173,20 @@ describe("QueueLess frontend", () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options = {}) => {
       const requestUrl = String(url);
       if (requestUrl.includes("/api/health")) return jsonResponse({});
+      if (requestUrl.includes("/api/auth/me")) {
+        return jsonResponse({ message: "Invalid token" }, 401);
+      }
+      if (requestUrl.includes("/api/customer-auth/me")) {
+        if (options.headers.Authorization === "Bearer current-customer-token") {
+          return jsonResponse({
+            customer: {
+              full_name: "Taylor Customer",
+              email: "taylor@example.com",
+            },
+          });
+        }
+        return jsonResponse({ message: "Invalid token" }, 401);
+      }
       if (requestUrl.includes("/api/customer-auth/login")) {
         expect(options.headers.Authorization).toBeUndefined();
         return jsonResponse({ access_token: "current-customer-token" });
@@ -189,24 +203,21 @@ describe("QueueLess frontend", () => {
     });
 
     const firstRender = render(<App />);
+    expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     await user.type(screen.getByLabelText("Email address"), "taylor@example.com");
     await user.type(screen.getByLabelText("Password"), "password123");
     await user.click(screen.getByRole("button", { name: /Sign in to customer portal/ }));
 
     expect(await screen.findByText(/You’re signed in/)).toBeInTheDocument();
     expect(localStorage.getItem("queueless_token")).toBeNull();
-    expect(localStorage.getItem("queueless_customer_token")).toBeNull();
+    expect(localStorage.getItem("queueless_customer_token")).toBe("current-customer-token");
     expect(fetch).toHaveBeenCalled();
 
     firstRender.unmount();
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
-
-    await user.type(screen.getByLabelText("Email address"), "taylor@example.com");
-    await user.type(screen.getByLabelText("Password"), "password123");
-    await user.click(screen.getByRole("button", { name: /Sign in to customer portal/ }));
     expect(await screen.findByText(/You’re signed in/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Logout" }));
+    await user.click(screen.getByRole("button", { name: "Open account menu" }));
+    await user.click(screen.getByRole("button", { name: "Log out" }));
     expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
   });
 
@@ -590,6 +601,12 @@ describe("QueueLess frontend", () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options = {}) => {
       const requestUrl = String(url);
       if (requestUrl.includes("/api/health")) return jsonResponse({});
+      if (requestUrl.includes("/api/auth/me")) {
+        return jsonResponse({ message: "Invalid token" }, 401);
+      }
+      if (requestUrl.includes("/api/customer-auth/me")) {
+        return jsonResponse({ message: "Invalid token" }, 401);
+      }
       if (requestUrl.includes("/api/customer-auth/login")) {
         expect(options.headers.Authorization).toBeUndefined();
         return jsonResponse({ access_token: "customer-session-token" });
@@ -614,6 +631,7 @@ describe("QueueLess frontend", () => {
     });
 
     const firstRender = render(<App />);
+    expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     await user.type(screen.getByLabelText("Email address"), "customer@example.com");
     await user.type(screen.getByLabelText("Password"), "password123");
     await user.click(screen.getByRole("button", { name: /Sign in to customer portal/ }));
@@ -632,11 +650,12 @@ describe("QueueLess frontend", () => {
         headers: expect.objectContaining({ Authorization: "Bearer admin-session-token" }),
       })
     ));
-    expect(localStorage.getItem("queueless_token")).toBeNull();
+    expect(localStorage.getItem("queueless_token")).toBe("admin-session-token");
 
     await user.click(screen.getByRole("button", { name: "Switch to Customer Portal" }));
     expect(await screen.findByText(/You’re signed in/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Logout" }));
+    await user.click(screen.getByRole("button", { name: "Open account menu" }));
+    await user.click(screen.getByRole("button", { name: "Log out" }));
     expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     await user.clear(screen.getByLabelText("Email address"));
     await user.clear(screen.getByLabelText("Password"));
@@ -658,7 +677,8 @@ describe("QueueLess frontend", () => {
     await user.type(screen.getByLabelText("Password"), "password123");
     await user.click(screen.getByRole("button", { name: /Sign in to dashboard/i }));
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Logout" }));
+    await user.click(screen.getByRole("button", { name: "Open account menu" }));
+    await user.click(screen.getByRole("button", { name: "Log out" }));
     expect(await screen.findByText(/ADMINISTRATOR ACCESS/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Switch to Customer Portal" }));
