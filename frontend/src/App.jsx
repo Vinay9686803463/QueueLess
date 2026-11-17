@@ -606,7 +606,14 @@ useEffect(() => {
           customerToken
         );
 
-        setBooking({ ...data, type: "appointment" });
+        setBooking({
+          ...data,
+          type: "appointment",
+          scheduled_at:
+            data.appointment?.scheduled_at ||
+            data.scheduled_at ||
+            appointmentTime,
+        });
       } else {
         data = await api(
           "/public/walk-in",
@@ -1745,9 +1752,19 @@ if (queueDate !== new Date().toLocaleDateString("en-CA")) {
                     <strong>Request submitted successfully</strong>
 
                     {booking.type === "appointment" && (
-                      <p>
-                        Appointment ID: {booking.appointment?.id}
-                      </p>
+                      <>
+                        <p>
+                          Appointment ID: {booking.appointment?.id}
+                        </p>
+                        <p>
+                          Appointment time:{" "}
+                          <b>
+                            {booking.scheduled_at
+                              ? new Date(booking.scheduled_at).toLocaleString()
+                              : "Selected time"}
+                          </b>
+                        </p>
+                      </>
                     )}
 
                     {booking.type === "walkin" && (
@@ -1758,14 +1775,13 @@ if (queueDate !== new Date().toLocaleDateString("en-CA")) {
                         <p>
                           Tracking code: <b>{booking.tracking_code}</b>
                         </p>
+                        <p>
+                          Estimated wait:{" "}
+                          {booking.estimated_wait_minutes ?? "To be confirmed"}{" "}
+                          minutes
+                        </p>
                       </>
                     )}
-
-                    <p>
-                      Estimated wait:{" "}
-                      {booking.estimated_wait_minutes ?? "To be confirmed"}{" "}
-                      minutes
-                    </p>
                   </div>
                 </div>
               )}
