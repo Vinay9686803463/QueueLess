@@ -1203,6 +1203,13 @@ if (!isTodayQueue) {
     ),
     [customerAppointments, currentTime]
   );
+  const adminUpcomingAppointmentsCount = useMemo(
+    () => adminAppointments.filter((item) =>
+      ["booked", "confirmed"].includes(String(item.status).toLowerCase()) &&
+      new Date(item.scheduled_at).getTime() >= currentTime
+    ).length,
+    [adminAppointments, currentTime]
+  );
   const customerAppointmentHistory = useMemo(
     () => customerAppointments.filter((item) => !customerUpcomingAppointments.includes(item)),
     [customerAppointments, customerUpcomingAppointments]
@@ -2261,6 +2268,12 @@ if (!isTodayQueue) {
                 }
                 icon="⌁"
               />
+              <StatCard
+                label="Upcoming appointments"
+                value={adminUpcomingAppointmentsCount}
+                detail="Confirmed or booked future visits"
+                icon="📅"
+              />
             </section>
 
             <section className="admin-content-grid">
@@ -2297,7 +2310,7 @@ if (!isTodayQueue) {
                   />
                     </label>
                     {!isTodayQueue && (
-                     <small>Future and historical queue records are read-only.</small>
+                     <small>Future and historical queue records are read-only. Select today's date to manage the live queue.</small>
                     )}
                   </div>
 
