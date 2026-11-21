@@ -222,6 +222,13 @@ function getQueueRows(data) {
     .sort((left, right) => Number(left.token_number) - Number(right.token_number));
 }
 
+function getLocalDateISO(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("queueless_theme") || (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
   const [profileOpen, setProfileOpen] = useState(false);
@@ -252,10 +259,9 @@ const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_c
   const [adminServices, setAdminServices] = useState([]);
   const [adminAppointments, setAdminAppointments] = useState([]);
   const [queue, setQueue] = useState([]);
-  const [queueDate, setQueueDate] = useState(
-    () => new Date().toLocaleDateString("en-CA")
-  );
-  const isTodayQueue = queueDate === new Date().toLocaleDateString("en-CA");
+  const [queueDate, setQueueDate] = useState(() => getLocalDateISO());
+  const queueDateManuallySelected = useRef(false);
+  const isTodayQueue = queueDate === getLocalDateISO();
   const [queuePaused, setQueuePaused] = useState(false);
   const [queuePauseSupported, setQueuePauseSupported] = useState(true);
   const [businessesLoading, setBusinessesLoading] = useState(false);
@@ -405,6 +411,18 @@ useEffect(() => {
     const timer = window.setInterval(updateTime, 60000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (queueDateManuallySelected.current) return;
+
+    const today = getLocalDateISO(
+      currentTime ? new Date(currentTime) : new Date()
+    );
+
+    setQueueDate((currentDate) =>
+      currentDate === today ? currentDate : today
+    );
+  }, [currentTime]);
 
   const notify = (message) => {
     setNotice(message);
@@ -963,7 +981,7 @@ useEffect(() => {
 
   const performQueueAction = async (actionKey, requestPath, successMessage) => {
     if (!selectedBusinessId || queueMutationInFlight.current) return;
-if (queueDate !== new Date().toLocaleDateString("en-CA")) {
+if (!isTodayQueue) {
   notify("Only today's queue can be managed. Future and historical queue records are read-only.");
   return;
 }
@@ -2199,7 +2217,7 @@ if (queueDate !== new Date().toLocaleDateString("en-CA")) {
                 label="Total queue entries"
                 value={queue.length}
                 detail={
-                  queueDate === new Date().toLocaleDateString("en-CA")
+                  isTodayQueue
                     ? "Today's queue records"
                     : `Records for ${queueDate}`
                 }
@@ -2221,7 +2239,7 @@ if (queueDate !== new Date().toLocaleDateString("en-CA")) {
                 label="Completed customers"
                 value={completedCount}
                 detail={
-                  queueDate === new Date().toLocaleDateString("en-CA")
+                  isTodayQueue
                     ? "Completed today"
                     : `Completed on ${queueDate}`
                 }
@@ -2252,7 +2270,7 @@ if (queueDate !== new Date().toLocaleDateString("en-CA")) {
                     <h2>
                       {isTodayQueue
                         ? "Live waiting list"
-                        : queueDate > new Date().toLocaleDateString("en-CA")
+                        : queueDate > getLocalDateISO()
                           ? "Scheduled queue preview"
                           : "Queue history"}
                     </h2>
@@ -2267,15 +2285,18 @@ if (queueDate !== new Date().toLocaleDateString("en-CA")) {
                       type="date"
                       className="input"
                       value={queueDate}
-                      onChange={(event) =>
-                        setQueueDate(
-                          event.target.value ||
-                          new Date().toLocaleDateString("en-CA")
-                        )
-                      }
+                      onChange={(event) => {
+                        const nextDate =
+                          event.target.value || getLocalDateISO();
+
+                        queueDateManuallySelected.current =
+                          nextDate !== getLocalDateISO();
+
+                        setQueueDate(nextDate);
+                      }}
                   />
                     </label>
-                    {queueDate !== new Date().toLocaleDateString("en-CA") && (
+                    {!isTodayQueue && (
                      <small>Future and historical queue records are read-only.</small>
                     )}
                   </div>
