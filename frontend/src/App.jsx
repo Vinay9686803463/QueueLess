@@ -1000,6 +1000,7 @@ if (!isTodayQueue) {
   };
 
   const callNext = async () => {
+    if (!isTodayQueue) return;
     if (queuePaused) {
       notify("Resume the queue before calling the next customer.");
       return;
@@ -1012,6 +1013,7 @@ if (!isTodayQueue) {
   };
 
   const queueAction = async (tokenId, action) => {
+    if (!isTodayQueue) return;
     const successMessages = {
       complete: "Service completed",
       skip: "Queue entry skipped",
@@ -1025,6 +1027,7 @@ if (!isTodayQueue) {
   };
 
   const pauseQueue = async () => {
+    if (!isTodayQueue) return;
     await performQueueAction(
       "pause",
       `/businesses/${selectedBusinessId}/queue/pause`,
@@ -1033,6 +1036,7 @@ if (!isTodayQueue) {
   };
 
   const resumeQueue = async () => {
+    if (!isTodayQueue) return;
     await performQueueAction(
       "resume",
       `/businesses/${selectedBusinessId}/queue/resume`,
@@ -1118,6 +1122,7 @@ if (!isTodayQueue) {
   };
 
   const runDemoQueueAction = async (method) => {
+    if (!isTodayQueue) return;
     if (!selectedBusinessId || demoActionLoading) return;
     setDemoActionLoading(true);
     try {
@@ -2328,7 +2333,7 @@ if (!isTodayQueue) {
                   <button
                     className="btn btn-teal"
                     onClick={callNext}
-                    disabled={!selectedBusinessId || queuePaused || Boolean(queueActionLoading)}
+                    disabled={!selectedBusinessId || !isTodayQueue || queuePaused || Boolean(queueActionLoading)}
                   >
                     {queueActionLoading === "call-next" ? "Calling..." : "Call Next Customer"}
                   </button>
@@ -2336,7 +2341,7 @@ if (!isTodayQueue) {
                   <button
                     className="btn btn-outline"
                     onClick={pauseQueue}
-                    disabled={!selectedBusinessId || !queuePauseSupported || queuePaused || Boolean(queueActionLoading)}
+                    disabled={!selectedBusinessId || !isTodayQueue || !queuePauseSupported || queuePaused || Boolean(queueActionLoading)}
                   >
                     {!queuePauseSupported
                       ? "Pause unavailable"
@@ -2364,7 +2369,7 @@ if (!isTodayQueue) {
                         className="btn btn-outline"
                         type="button"
                         onClick={() => runDemoQueueAction("DELETE")}
-                        disabled={!selectedBusinessId || demoActionLoading}
+                        disabled={!selectedBusinessId || !isTodayQueue || demoActionLoading}
                       >
                         Remove Demo Entries
                       </button>
