@@ -2486,7 +2486,7 @@ if (!isTodayQueue) {
                     <button
                       className="btn btn-teal"
                       onClick={callNext}
-                      disabled={!selectedBusinessId || queuePaused || Boolean(queueActionLoading)}
+                      disabled={!selectedBusinessId || !isTodayQueue || queuePaused || Boolean(queueActionLoading)}
                     >
                       {queueActionLoading === "call-next" ? "Calling..." : "Call Next Customer"}
                     </button>
