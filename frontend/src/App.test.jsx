@@ -105,14 +105,14 @@ describe("QueueLess frontend", () => {
         return jsonResponse({ services: [{ id: "service-1", service_name: "Consultation", duration_minutes: 30, price: 0 }] });
       }
       if (requestUrl.includes("/api/public/businesses")) {
-        return jsonResponse({ businesses: [{ id: "business-1", business_name: "Demo Clinic", business_type: "Clinic", is_active: true }] });
+        return jsonResponse({ businesses: [{ id: "business-1", business_name: "Pioneer Community Bank", business_type: "Clinic", is_active: true }] });
       }
       if (requestUrl.includes("/api/public/availability")) {
         return jsonResponse({ slots: [{ start: "2027-01-02T10:00:00Z", end: "2027-01-02T11:00:00Z", label: "10:00 AM – 11:00 AM" }] });
       }
       if (requestUrl.includes("/api/public/business/demo-clinic") || requestUrl.includes("/api/public/business/business-1")) {
         return jsonResponse({
-          business: { id: "business-1", business_name: "Demo Clinic" },
+          business: { id: "business-1", business_name: "Pioneer Community Bank" },
         });
       }
       if (requestUrl.includes("/api/public/bookings")) {
@@ -697,7 +697,7 @@ describe("QueueLess frontend", () => {
       }
       if (requestUrl.endsWith("/api/businesses")) {
         return jsonResponse({
-          businesses: [{ id: "business-1", business_name: "Test Clinic" }],
+          businesses: [{ id: "business-1", business_name: "Pioneer Community Bank" }],
         });
       }
       if (requestUrl.includes("/api/businesses/business-1/services")) {

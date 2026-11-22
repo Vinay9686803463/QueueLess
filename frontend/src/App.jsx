@@ -843,9 +843,18 @@ useEffect(() => {
       const list = data.businesses || [];
 
       setBusinesses(list);
-      const nextSelectedId = list.some((item) => String(item.id) === String(selectedBusinessIdRef.current))
-        ? selectedBusinessIdRef.current
-        : list[0]?.id || "";
+      if (!list.length) {
+        setBusinessesError("No business configured.");
+        setBusinessesLoading(false);
+        return;
+      }
+      const pioneer = list.find((item) => String(item.business_name || "").trim() === "Pioneer Community Bank");
+      if (!pioneer) {
+        setBusinessesError("Pioneer Community Bank was not found in your businesses.");
+        setBusinessesLoading(false);
+        return;
+      }
+      const nextSelectedId = pioneer.id;
       selectedBusinessIdRef.current = nextSelectedId;
       setSelectedBusinessId(nextSelectedId);
       if (!list.length) {
@@ -896,7 +905,7 @@ useEffect(() => {
     setDashboardError("");
     if (!quiet) setDashboardLoading(true);
     try {
-      const [svc, q, appointments] = await Promise.all([
+      const [svcResult, qResult, apptResult] = await Promise.allSettled([
         api(`/businesses/${businessId}/services`, {}, authToken),
         api(
           `/businesses/${businessId}/queue?date=${encodeURIComponent(queueDate)}`,
@@ -912,15 +921,30 @@ useEffect(() => {
       ) {
         return false;
       }
-      setAdminServices(svc.services || []);
-      setQueue(getQueueRows(q));
-      setQueuePaused(q.queue_paused || false);
-      setQueuePauseSupported(q.queue_pause_supported !== false);
-      setAdminAppointments(
-        (appointments.appointments || []).filter(
-          (appointment) => String(appointment.business_id) === String(businessId)
-        )
-      );
+
+      if (svcResult.status === "fulfilled") {
+        setAdminServices(svcResult.value.services || []);
+      } else {
+        notify(svcResult.reason?.message || "Unable to retrieve services");
+      }
+
+      if (qResult.status === "fulfilled") {
+        setQueue(getQueueRows(qResult.value));
+        setQueuePaused(qResult.value.queue_paused || false);
+        setQueuePauseSupported(qResult.value.queue_pause_supported !== false);
+      } else {
+        notify(qResult.reason?.message || "Unable to retrieve queue");
+      }
+
+      if (apptResult.status === "fulfilled") {
+        setAdminAppointments(
+          (apptResult.value.appointments || []).filter(
+            (appointment) => String(appointment.business_id) === String(businessId)
+          )
+        );
+      } else {
+        notify(apptResult.reason?.message || "Unable to retrieve appointments");
+      }
       return true;
     } catch (err) {
       if (requestId === businessLoadRequest.current) {
