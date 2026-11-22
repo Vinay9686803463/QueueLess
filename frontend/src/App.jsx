@@ -844,7 +844,7 @@ useEffect(() => {
 
       setBusinesses(list);
       if (!list.length) {
-        setBusinessesError("No business configured.");
+        setBusinessesError("No business configured");
         setBusinessesLoading(false);
         return;
       }
@@ -2217,7 +2217,7 @@ if (!isTodayQueue) {
             ) : businessesError ? (
               <section className="dashboard-empty-state" role="alert">
                 <span className="panel-icon">!</span>
-                <h2>Businesses could not be loaded</h2>
+                <h2>{businessesError === "No business configured" ? "No business configured" : "Businesses could not be loaded"}</h2>
                 <p>{businessesError}</p>
                 <button
                   className="btn btn-outline"
