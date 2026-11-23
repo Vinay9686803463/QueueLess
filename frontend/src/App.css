@@ -261,7 +261,7 @@ html[data-theme="dark"] .admin-record, html[data-theme="dark"] .customer-record,
 }
 
 .purple-eyebrow {
-  color: var(--purple);
+  color: #168b91;
 }
 
 .customer-hero-art {
@@ -304,7 +304,7 @@ html[data-theme="dark"] .admin-record, html[data-theme="dark"] .customer-record,
 }
 
 .customer-hero-copy h1 span {
-  color: #b7a0e3;
+  color: #a7d6d3;
 }
 
 .customer-hero-copy > p {
@@ -3890,3 +3890,42 @@ html[data-theme="dark"] .customer-account-description,
 html[data-theme="dark"] .admin-record span,
 html[data-theme="dark"] .customer-record span { color: #a9b4c0; }
 html[data-theme="dark"] .profile-appearance button[aria-pressed="true"] { background: #137f82 !important; color: #fff !important; }
+
+/* Customer portal visual alignment with admin portal */
+.customer-mode .customer-layout,
+.customer-layout {
+  background: #f3f6fa;
+}
+
+.customer-mode .customer-main.customer-page,
+.customer-main.customer-page {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding-top: 0;
+}
+
+.customer-mode .customer-sidebar,
+.customer-sidebar {
+  /* inherits admin sidebar styling */
+}
+
+.customer-mode .customer-sidebar .sidebar-caption,
+.customer-sidebar .sidebar-caption {
+  color: #82aab2;
+}
+
+/* Customer portal: light dashboard cards consistent with admin portal */
+.customer-mode .customer-account-panel,
+.customer-mode .customer-record-panel,
+.customer-mode .checkin-card,
+.customer-mode .tracking-result {
+  background: #ffffff;
+  border: 1px solid #e6edef;
+  border-radius: 13px;
+  box-shadow: 0 10px 28px #122c3c12;
+}
+
+.customer-mode .customer-cancel-button {
+  border-radius: 8px;
+}

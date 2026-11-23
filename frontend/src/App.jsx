@@ -20,7 +20,11 @@ async function api(path, options = {}, token = "") {
     },
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.message || data.error || "Request failed");
+  if (!response.ok) {
+    const error = new Error(data.message || data.error || "Request failed");
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -351,14 +355,14 @@ const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_c
     if (!token) { setAdminProfile(null); return; }
     if (adminProfile || !restoredAdminSession.current) return;
     let active = true;
-    api("/auth/me", {}, token).then((data) => { if (active) setAdminProfile(data.user || null); }).catch(() => { if (active && adminTokenRef.current === token) { setAdminProfile(null); setToken(""); adminTokenRef.current = ""; } });
+    api("/auth/me", {}, token).then((data) => { if (active) setAdminProfile(data.user || null); }).catch((error) => { if (!active || adminTokenRef.current !== token) return; const status = error?.status; if (!status) return; if (![401, 403, 404].includes(status)) return; setAdminProfile(null); setToken(""); adminTokenRef.current = ""; });
     return () => { active = false; };
   }, [token, adminProfile]);
 
   useEffect(() => {
     if (!customerToken || customerProfile || !restoredCustomerSession.current) return;
     let active = true;
-    api("/customer-auth/me", {}, customerToken).then((data) => { if (active) setCustomerProfile(data.customer || null); }).catch(() => { if (active && customerTokenRef.current === customerToken) { setCustomerProfile(null); setCustomerToken(""); customerTokenRef.current = ""; } });
+    api("/customer-auth/me", {}, customerToken).then((data) => { if (active) setCustomerProfile(data.customer || null); }).catch((error) => { if (!active || customerTokenRef.current !== customerToken) return; const status = error?.status; if (!status) return; if (![401, 403, 404].includes(status)) return; setCustomerProfile(null); setCustomerToken(""); customerTokenRef.current = ""; setCustomerAppointments([]); setCustomerTokens([]); });
     return () => { active = false; };
   }, [customerToken, customerProfile]);
 
@@ -385,6 +389,28 @@ const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_c
       .then(() => setBackendStatus("online"))
       .catch(() => setBackendStatus("offline"));
   }, []);
+
+/* CROSS-TAB SESSION SYNCHRONIZATION */
+useEffect(() => {
+  const handleStorage = (event) => {
+    if (event.key === "queueless_token" && event.newValue === null && token) {
+      adminTokenRef.current = "";
+      restoredAdminSession.current = false;
+      setToken("");
+      setAdminProfile(null);
+    }
+    if (event.key === "queueless_customer_token" && event.newValue === null && customerToken) {
+      customerTokenRef.current = "";
+      restoredCustomerSession.current = false;
+      setCustomerToken("");
+      setCustomerProfile(null);
+      setCustomerAppointments([]);
+      setCustomerTokens([]);
+    }
+  };
+  window.addEventListener("storage", handleStorage);
+  return () => window.removeEventListener("storage", handleStorage);
+}, [token, customerToken]);
 
 /* ADMIN TOKEN PERSISTENCE */
 useEffect(() => {
@@ -730,6 +756,7 @@ useEffect(() => {
       setAdminProfile(data.user || { full_name: email, email });
       adminTokenRef.current = data.access_token;
       setToken(data.access_token);
+      restoredAdminSession.current = true;
       notify("Login successful");
     } catch (err) {
       setToken("");
@@ -755,6 +782,7 @@ useEffect(() => {
       setAdminProfile(data.user || { full_name: regName, email: regEmail });
       adminTokenRef.current = data.access_token;
       setToken(data.access_token);
+      restoredAdminSession.current = true;
       notify("Registration successful");
       setShowRegister(false);
     } catch (err) {
@@ -763,12 +791,24 @@ useEffect(() => {
   };
 
   const loadCustomerAccount = async (authToken) => {
-    const [appointments, queueTokens] = await Promise.all([
-      api("/customer-auth/appointments", {}, authToken),
-      api("/customer-auth/queue-tokens", {}, authToken),
-    ]);
-    setCustomerAppointments(appointments.appointments || []);
-    setCustomerTokens(queueTokens.tokens || []);
+    try {
+      const [appointments, queueTokens] = await Promise.all([
+        api("/customer-auth/appointments", {}, authToken),
+        api("/customer-auth/queue-tokens", {}, authToken),
+      ]);
+      setCustomerAppointments(appointments.appointments || []);
+      setCustomerTokens(queueTokens.tokens || []);
+    } catch (error) {
+      if (error?.status === 401 || error?.status === 403 || error?.status === 404) {
+        customerTokenRef.current = "";
+        restoredCustomerSession.current = false;
+        setCustomerToken("");
+        setCustomerProfile(null);
+        setCustomerAppointments([]);
+        setCustomerTokens([]);
+      }
+      throw error;
+    }
   };
 
   useEffect(() => {
@@ -801,6 +841,7 @@ useEffect(() => {
       setCustomerPhone(data.customer?.phone || "");
       customerTokenRef.current = data.access_token;
       setCustomerToken(data.access_token);
+      restoredCustomerSession.current = true;
       notify("Customer login successful");
       try {
         await loadCustomerAccount(data.access_token);
@@ -824,6 +865,7 @@ useEffect(() => {
       setCustomerProfile(data.customer || { full_name: customerName, email: customerEmail, phone: customerPhone });
       customerTokenRef.current = data.access_token;
       setCustomerToken(data.access_token);
+      restoredCustomerSession.current = true;
       notify("Customer registration successful");
       try {
         await loadCustomerAccount(data.access_token);
@@ -838,6 +880,7 @@ useEffect(() => {
   const customerLogout = () => {
     setCustomerToken("");
     customerTokenRef.current = "";
+    restoredCustomerSession.current = false;
     setCustomerProfile(null);
     setCustomerAppointments([]);
     setCustomerTokens([]);
@@ -852,6 +895,7 @@ useEffect(() => {
     businessLoadRequest.current += 1;
     setToken("");
     adminTokenRef.current = "";
+    restoredAdminSession.current = false;
     setBusinesses([]);
     setBusinessesError("");
     setSelectedBusinessId("");
@@ -912,6 +956,12 @@ useEffect(() => {
         setSelectedBusinessId(nextSelection.id);
       }
     } catch (err) {
+      if (err?.status === 401 || err?.status === 403 || err?.status === 404) {
+        adminTokenRef.current = "";
+        restoredAdminSession.current = false;
+        setToken("");
+        setAdminProfile(null);
+      }
       setBusinessesError(err.message || "Unable to retrieve businesses");
     } finally {
       setBusinessesLoading(false);
@@ -1424,7 +1474,7 @@ if (!canManageQueue) {
     <div
       className={`app-shell ${
         role === "admin" ? "admin-mode" : "customer-mode"
-      }`}
+      } admin-mode`}
     >
       <header className="topbar">
         <a
@@ -1701,8 +1751,55 @@ if (!canManageQueue) {
       )}
 
       {role === "customer" && customerToken && (
-        <main className="customer-page">
-          <section className="customer-hero-layout">
+        <div className="admin-layout customer-layout">
+          <aside className="admin-sidebar customer-sidebar">
+            <a
+              className="admin-brand"
+              href="#customer-overview"
+              onClick={(e) => e.preventDefault()}
+            >
+              <span className="brand-mark">Q</span>
+              <span>
+                Queue<span>Less</span>
+              </span>
+            </a>
+
+            <div className="sidebar-caption">CUSTOMER</div>
+
+            <nav className="sidebar-nav">
+              <a className="active" href="#customer-overview">
+                <Icon>▦</Icon>Overview
+              </a>
+              <a href="#customer-account">
+                <Icon>♙</Icon>My Account
+              </a>
+              <a href="#customer-upcoming">
+                <Icon>▣</Icon>Upcoming
+              </a>
+              <a href="#customer-history">
+                <Icon>☷</Icon>History
+              </a>
+              <a href="#customer-tokens">
+                <Icon>▤</Icon>Queue Tokens
+              </a>
+              <a href="#customer-checkin">
+                <Icon>◈</Icon>Check In
+              </a>
+              <a href="#customer-track">
+                <Icon>◷</Icon>Track
+              </a>
+            </nav>
+
+            <div className="sidebar-bottom">
+              <div className="sidebar-status">
+                <i />
+                API connection <strong>{backendStatus}</strong>
+              </div>
+            </div>
+          </aside>
+
+          <main className="admin-main customer-main customer-page" id="customer-overview">
+          <section className="customer-hero-layout" id="customer-account">
             <div className="customer-hero-art">
               <div className="customer-hero-orbit" />
               <div className="customer-hero-copy">
@@ -1746,7 +1843,7 @@ if (!canManageQueue) {
                   <span>{customerProfile?.phone || customerPhone || "Phone not provided"}</span>
                 </div>
                 <div className="customer-dashboard-records">
-                  <section className="customer-record-panel" aria-labelledby="upcoming-title">
+                  <section className="customer-record-panel" id="customer-upcoming" aria-labelledby="upcoming-title">
                     <h3 id="upcoming-title">Upcoming appointments</h3>
                     {customerUpcomingAppointments.length ? customerUpcomingAppointments.map((appointment) => (
                       <article className="customer-record" key={appointment.id}>
@@ -1767,7 +1864,7 @@ if (!canManageQueue) {
                       </article>
                     )) : <p>No upcoming appointments.</p>}
                   </section>
-                  <section className="customer-record-panel" aria-labelledby="history-title">
+                  <section className="customer-record-panel" id="customer-history" aria-labelledby="history-title">
                     <h3 id="history-title">Appointment history</h3>
                     {customerAppointmentHistory.length ? customerAppointmentHistory.map((appointment) => (
                       <article className="customer-record" key={appointment.id}>
@@ -1780,7 +1877,7 @@ if (!canManageQueue) {
                       </article>
                     )) : <p>No appointment history yet.</p>}
                   </section>
-                  <section className="customer-record-panel customer-live-queue" aria-labelledby="tokens-title">
+                  <section className="customer-record-panel customer-live-queue" id="customer-tokens" aria-labelledby="tokens-title">
                     <h3 id="tokens-title">Queue tokens · live status</h3>
                     {customerTokens.length ? customerTokens.map((queueToken) => (
                       <article className="customer-record" key={queueToken.id}>
@@ -1797,7 +1894,7 @@ if (!canManageQueue) {
             </div>
           </section>
 
-          <section className="checkin-layout">
+          <section className="checkin-layout" id="customer-checkin">
             <div className="checkin-aside">
               <span className="eyebrow purple-eyebrow">
                 QUICK & EASY
@@ -2000,7 +2097,7 @@ if (!canManageQueue) {
             </div>
           </section>
 
-          <section className="track-section">
+          <section className="track-section" id="customer-track">
             <div>
               <span className="eyebrow purple-eyebrow">
                 ALREADY CHECKED IN?
@@ -2080,6 +2177,7 @@ if (!canManageQueue) {
               ))}
           </section>
         </main>
+        </div>
       )}
 
       {role === "admin" && !token && (
