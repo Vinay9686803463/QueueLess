@@ -817,6 +817,7 @@ useEffect(() => {
     setToken("");
     adminTokenRef.current = "";
     setBusinesses([]);
+    setBusinessesError("");
     setSelectedBusinessId("");
     setQueue([]);
     setQueuePaused(false);
@@ -840,37 +841,40 @@ useEffect(() => {
     setBusinessesError("");
     try {
       const data = await api("/businesses", {}, token);
-      const list = data.businesses || [];
+      if (!Array.isArray(data.businesses)) {
+        throw new Error("Unable to retrieve businesses");
+      }
+      const list = data.businesses;
 
       setBusinesses(list);
       if (!list.length) {
-        setBusinessesError("No business configured");
-        setBusinessesLoading(false);
-        return;
-      }
-      const pioneer = list.find((item) => String(item.business_name || "").trim() === "Pioneer Community Bank");
-      if (!pioneer) {
-        setBusinessesError("Pioneer Community Bank was not found in your businesses.");
-        setBusinessesLoading(false);
-        return;
-      }
-      const nextSelectedId = pioneer.id;
-      selectedBusinessIdRef.current = nextSelectedId;
-      setSelectedBusinessId(nextSelectedId);
-      if (!list.length) {
+        businessLoadRequest.current += 1;
+        selectedBusinessIdRef.current = "";
+        setSelectedBusinessId("");
         setQueue([]);
         setQueuePaused(false);
         setQueuePauseSupported(true);
         setAdminServices([]);
         setAdminAppointments([]);
+        setDashboardLoading(false);
+        return;
       }
-      if (import.meta.env.DEV && list.length) {
-        await Promise.allSettled(list.filter((item) => item.is_active !== false).map((item) => seedDemoBusiness(item.id, token)));
-        if (nextSelectedId) await loadBusinessData(nextSelectedId, token, { quiet: true });
+      const currentSelection = list.find(
+        (item) => String(item.id) === String(selectedBusinessIdRef.current)
+      );
+      const preferredBusiness = list.find(
+        (item) => item.business_name === "Pioneer Community Bank"
+      );
+      const nextSelection = currentSelection || preferredBusiness || list[0];
+      const selectionChanged =
+        String(selectedBusinessIdRef.current) !== String(nextSelection.id);
+      if (selectionChanged) {
+        businessLoadRequest.current += 1;
+        selectedBusinessIdRef.current = nextSelection.id;
+        setSelectedBusinessId(nextSelection.id);
       }
     } catch (err) {
-      setBusinessesError(err.message);
-      notify(err.message);
+      setBusinessesError(err.message || "Unable to retrieve businesses");
     } finally {
       setBusinessesLoading(false);
     }
@@ -905,7 +909,7 @@ useEffect(() => {
     setDashboardError("");
     if (!quiet) setDashboardLoading(true);
     try {
-      const [svcResult, qResult, apptResult] = await Promise.allSettled([
+      const [servicesResult, queueResult, appointmentsResult] = await Promise.allSettled([
         api(`/businesses/${businessId}/services`, {}, authToken),
         api(
           `/businesses/${businessId}/queue?date=${encodeURIComponent(queueDate)}`,
@@ -922,28 +926,28 @@ useEffect(() => {
         return false;
       }
 
-      if (svcResult.status === "fulfilled") {
-        setAdminServices(svcResult.value.services || []);
+      if (servicesResult.status === "fulfilled") {
+        setAdminServices(servicesResult.value.services || []);
       } else {
-        notify(svcResult.reason?.message || "Unable to retrieve services");
+        notify(servicesResult.reason?.message || "Unable to retrieve services");
       }
 
-      if (qResult.status === "fulfilled") {
-        setQueue(getQueueRows(qResult.value));
-        setQueuePaused(qResult.value.queue_paused || false);
-        setQueuePauseSupported(qResult.value.queue_pause_supported !== false);
+      if (queueResult.status === "fulfilled") {
+        setQueue(getQueueRows(queueResult.value));
+        setQueuePaused(queueResult.value.queue_paused || false);
+        setQueuePauseSupported(queueResult.value.queue_pause_supported !== false);
       } else {
-        notify(qResult.reason?.message || "Unable to retrieve queue");
+        notify(queueResult.reason?.message || "Unable to retrieve queue");
       }
 
-      if (apptResult.status === "fulfilled") {
+      if (appointmentsResult.status === "fulfilled") {
         setAdminAppointments(
-          (apptResult.value.appointments || []).filter(
+          (appointmentsResult.value.appointments || []).filter(
             (appointment) => String(appointment.business_id) === String(businessId)
           )
         );
       } else {
-        notify(apptResult.reason?.message || "Unable to retrieve appointments");
+        notify(appointmentsResult.reason?.message || "Unable to retrieve appointments");
       }
       return true;
     } catch (err) {
@@ -2209,6 +2213,18 @@ if (!isTodayQueue) {
               </div>
             )}
 
+            {!businessesLoading &&
+              !businessesError &&
+              businesses.length > 0 &&
+              !businesses.some(
+                (item) => item.business_name === "Pioneer Community Bank"
+              ) && (
+                <p className="business-availability-notice" role="status">
+                  Pioneer Community Bank is unavailable. Showing{" "}
+                  {selectedBusiness?.business_name || "an available business"} instead.
+                </p>
+              )}
+
             {businessesLoading ? (
               <section className="dashboard-empty-state" role="status">
                 <span className="dashboard-loading-indicator" />
@@ -2217,7 +2233,7 @@ if (!isTodayQueue) {
             ) : businessesError ? (
               <section className="dashboard-empty-state" role="alert">
                 <span className="panel-icon">!</span>
-                <h2>{businessesError === "No business configured" ? "No business configured" : "Businesses could not be loaded"}</h2>
+                <h2>Businesses could not be loaded</h2>
                 <p>{businessesError}</p>
                 <button
                   className="btn btn-outline"

@@ -8,6 +8,48 @@ function jsonResponse(data, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: async () => data };
 }
 
+function mockAdminApi({
+  businesses = [],
+  queues = {},
+  services = {},
+  appointments = [],
+} = {}) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+    const requestUrl = String(url);
+    if (requestUrl.includes("/api/health")) return jsonResponse({});
+    if (requestUrl.includes("/api/auth/login")) {
+      return jsonResponse({ access_token: "admin-session-token" });
+    }
+    if (requestUrl.endsWith("/api/businesses")) {
+      return jsonResponse({ status: "success", count: businesses.length, businesses });
+    }
+
+    const serviceMatch = requestUrl.match(/\/api\/businesses\/([^/?]+)\/services$/);
+    if (serviceMatch) {
+      return jsonResponse({ services: services[serviceMatch[1]] || [] });
+    }
+    const queueMatch = requestUrl.match(/\/api\/businesses\/([^/?]+)\/queue(?:\?|$)/);
+    if (queueMatch) {
+      const response = queues[queueMatch[1]];
+      return typeof response === "function"
+        ? response()
+        : jsonResponse(response || { waiting: [] });
+    }
+    if (requestUrl.includes("/api/appointments")) {
+      return jsonResponse({ appointments });
+    }
+    return jsonResponse({ message: "not found" }, 404);
+  });
+}
+
+async function signInAsAdmin(user) {
+  await user.click(screen.getByRole("button", { name: "Switch to Admin Portal" }));
+  await user.type(screen.getByLabelText("Email address"), "admin@example.com");
+  await user.type(screen.getByLabelText("Password"), "password123");
+  await user.click(screen.getByRole("button", { name: /Sign in to dashboard/ }));
+  await screen.findByRole("heading", { name: "Dashboard" });
+}
+
 describe("QueueLess frontend", () => {
   let user;
 
@@ -518,6 +560,203 @@ describe("QueueLess frontend", () => {
     expect(screen.queryByLabelText("Verification code")).not.toBeInTheDocument();
   });
 
+  it("selects Pioneer Community Bank by exact name when it exists", async () => {
+    const businesses = [
+      { id: "pioneer-db-id-42", business_name: "Pioneer Community Bank" },
+      { id: "vinay-db-id-17", business_name: "Vinay Clinic" },
+    ];
+    const fetch = mockAdminApi({ businesses });
+
+    render(<App />);
+    await signInAsAdmin(user);
+
+    const selector = await screen.findByLabelText("Current business");
+    await waitFor(() => expect(selector).toHaveValue("pioneer-db-id-42"));
+    expect([...selector.options].map((option) => option.textContent)).toEqual([
+      "Select business",
+      "Pioneer Community Bank",
+      "Vinay Clinic",
+    ]);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(fetch.mock.calls.some(([url]) => String(url).includes("/queue/demo"))).toBe(false);
+  });
+
+  it("falls back to Vinay Clinic and keeps the dashboard usable when Pioneer is absent", async () => {
+    const fetch = mockAdminApi({
+      businesses: [{ id: "vinay-db-id-17", business_name: "Vinay Clinic" }],
+      queues: {
+        "vinay-db-id-17": {
+          waiting: [{
+            id: "vinay-queue-1",
+            token_number: 1,
+            customer_name: "Vinay Customer",
+            service_name: "Consultation",
+            status: "waiting",
+          }],
+        },
+      },
+      services: {
+        "vinay-db-id-17": [{
+          id: "vinay-service-1",
+          service_name: "Vinay Consultation",
+          is_active: true,
+        }],
+      },
+    });
+
+    render(<App />);
+    await signInAsAdmin(user);
+
+    expect(await screen.findByLabelText("Current business")).toHaveValue("vinay-db-id-17");
+    expect(await screen.findByText(
+      "Pioneer Community Bank is unavailable. Showing Vinay Clinic instead.",
+      { selector: ".business-availability-notice" }
+    )).toBeInTheDocument();
+    expect(await screen.findByText("Vinay Customer")).toBeInTheDocument();
+    expect(await screen.findByText("Vinay Consultation")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Businesses could not be loaded" })).not.toBeInTheDocument();
+    expect(fetch.mock.calls.some(([url]) => String(url).includes("/api/businesses/vinay-db-id-17/queue?"))).toBe(true);
+    expect(fetch.mock.calls.some(([url]) => String(url).includes("/api/businesses/vinay-db-id-17/services"))).toBe(true);
+  });
+
+  it("keeps every API business available in the selector", async () => {
+    const businesses = [
+      { id: "pioneer-id", business_name: "Pioneer Community Bank" },
+      { id: "vinay-id", business_name: "Vinay Clinic" },
+      { id: "another-id", business_name: "Another Clinic" },
+    ];
+    mockAdminApi({ businesses });
+
+    render(<App />);
+    await signInAsAdmin(user);
+
+    const selector = await screen.findByLabelText("Current business");
+    await waitFor(() => expect(selector).toHaveValue("pioneer-id"));
+    expect([...selector.options].slice(1).map((option) => option.textContent)).toEqual(
+      businesses.map((business) => business.business_name)
+    );
+  });
+
+  it("reloads queue, services, and appointments for the newly selected business", async () => {
+    const businesses = [
+      { id: "business-one", business_name: "Pioneer Community Bank" },
+      { id: "business-two", business_name: "Vinay Clinic" },
+    ];
+    const fetch = mockAdminApi({
+      businesses,
+      queues: {
+        "business-one": { waiting: [{
+          id: "queue-one",
+          token_number: 1,
+          customer_name: "First Business Customer",
+          service_name: "First Service",
+          status: "waiting",
+        }] },
+        "business-two": { waiting: [{
+          id: "queue-two",
+          token_number: 2,
+          customer_name: "Second Business Customer",
+          service_name: "Second Service",
+          status: "waiting",
+        }] },
+      },
+      services: {
+        "business-one": [{ id: "service-one", service_name: "First Business Service", is_active: true }],
+        "business-two": [{ id: "service-two", service_name: "Second Business Service", is_active: true }],
+      },
+      appointments: [
+        {
+          id: "appointment-one",
+          business_id: "business-one",
+          customer_name: "First Business Appointment",
+          service_name: "First Appointment Service",
+          status: "confirmed",
+          scheduled_at: "2027-01-02T10:00:00",
+        },
+        {
+          id: "appointment-two",
+          business_id: "business-two",
+          customer_name: "Second Business Appointment",
+          service_name: "Second Appointment Service",
+          status: "confirmed",
+          scheduled_at: "2027-01-02T11:00:00",
+        },
+      ],
+    });
+
+    render(<App />);
+    await signInAsAdmin(user);
+    const selector = await screen.findByLabelText("Current business");
+    expect(await screen.findByText("First Business Customer")).toBeInTheDocument();
+    expect(await screen.findByText("First Business Service")).toBeInTheDocument();
+    expect(await screen.findByText(/First Appointment Service · First Business Appointment/)).toBeInTheDocument();
+
+    await user.selectOptions(selector, "business-two");
+
+    expect(await screen.findByText("Second Business Customer")).toBeInTheDocument();
+    expect(await screen.findByText("Second Business Service")).toBeInTheDocument();
+    expect(await screen.findByText(/Second Appointment Service · Second Business Appointment/)).toBeInTheDocument();
+    expect(screen.queryByText("First Business Customer")).not.toBeInTheDocument();
+    expect(screen.queryByText("First Business Service")).not.toBeInTheDocument();
+    expect(screen.queryByText(/First Appointment Service · First Business Appointment/)).not.toBeInTheDocument();
+    expect(fetch.mock.calls.some(([url]) => String(url).includes("/api/businesses/business-two/queue?"))).toBe(true);
+    expect(fetch.mock.calls.some(([url]) => String(url).includes("/api/businesses/business-two/services"))).toBe(true);
+    expect(fetch.mock.calls.filter(([url]) => String(url).includes("/api/appointments")).length).toBeGreaterThan(1);
+  });
+
+  it("shows a no-businesses state for a successful empty API response", async () => {
+    mockAdminApi({ businesses: [] });
+
+    render(<App />);
+    await signInAsAdmin(user);
+
+    expect(await screen.findByRole("heading", { name: "No business configured" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Businesses could not be loaded" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
+
+  it("ignores an old business response that completes after switching businesses", async () => {
+    let resolveOldQueue;
+    const oldQueueResponse = new Promise((resolve) => {
+      resolveOldQueue = () => resolve(jsonResponse({
+        waiting: [{
+          id: "old-queue",
+          token_number: 1,
+          customer_name: "Old Business Customer",
+          service_name: "Old Service",
+          status: "waiting",
+        }],
+      }));
+    });
+    mockAdminApi({
+      businesses: [
+        { id: "business-one", business_name: "Pioneer Community Bank" },
+        { id: "business-two", business_name: "Vinay Clinic" },
+      ],
+      queues: {
+        "business-one": () => oldQueueResponse,
+        "business-two": { waiting: [{
+          id: "current-queue",
+          token_number: 2,
+          customer_name: "Current Business Customer",
+          service_name: "Current Service",
+          status: "waiting",
+        }] },
+      },
+    });
+
+    render(<App />);
+    await signInAsAdmin(user);
+    const selector = await screen.findByLabelText("Current business");
+    await waitFor(() => expect(selector).toHaveValue("business-one"));
+    await user.selectOptions(selector, "business-two");
+
+    expect(await screen.findByText("Current Business Customer")).toBeInTheDocument();
+    resolveOldQueue();
+    await waitFor(() => expect(screen.queryByText("Old Business Customer")).not.toBeInTheDocument());
+    expect(screen.getByText("Current Business Customer")).toBeInTheDocument();
+  });
+
   it("shows a business API error instead of the no-business empty state", async () => {
     let businessListRequests = 0;
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options = {}) => {
@@ -802,12 +1041,12 @@ describe("QueueLess frontend", () => {
     await waitForRequest("/queue/resume");
     await user.click(screen.getAllByRole("button", { name: "Call Next Customer", exact: true })[0]);
     await waitForRequest("/queue/call-next");
-    await waitForRequest("/queue/demo");
     await user.click(screen.getByRole("button", { name: "Remove Demo Entries" }));
     await waitForRequest("/queue/demo", "DELETE");
     await user.type(screen.getByLabelText("Service name"), "New service");
     await user.click(screen.getByRole("button", { name: "Add service" }));
     await waitForRequest("/services", "POST");
+    await waitForRequest("/queue/demo");
     await user.click(screen.getByRole("button", { name: "Deactivate" }));
     await waitForRequest("/services/service-1", "PUT");
     await user.click(screen.getByRole("button", { name: "Edit" }));

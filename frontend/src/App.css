@@ -1314,6 +1314,16 @@ html[data-theme="dark"] .admin-record, html[data-theme="dark"] .customer-record,
   line-height: 1.6;
 }
 
+.business-availability-notice {
+  margin: 0 0 16px;
+  padding: 11px 14px;
+  border: 1px solid #cfe4eb;
+  border-radius: 9px;
+  color: #426a78;
+  background: #f2fafc;
+  font-size: 12px;
+}
+
 .dashboard-error {
   display: flex;
   align-items: center;
