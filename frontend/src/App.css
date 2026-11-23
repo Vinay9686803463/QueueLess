@@ -2655,7 +2655,22 @@ html[data-theme="dark"] .admin-record, html[data-theme="dark"] .customer-record,
 .login-card h1 { color: #ffffff; }
 .login-card label { color: #cbd5e1; font-size: 14px; }
 .login-card .input { background: #0f172a; color: #ffffff; border: 1px solid #334155; }
-.btn-admin-login { background: linear-gradient(135deg, #007BFF, #17A2B8); border: none; }
+.btn-admin-login {
+  height: 44px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #007BFF, #17A2B8);
+  color: #ffffff;
+  font-weight: 700;
+}
+.btn-secondary {
+  height: 44px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #007BFF, #17A2B8);
+  color: #ffffff;
+  font-weight: 700;
+}
 
 .topbar {
   background: linear-gradient(135deg, #0f172a, #1e3a8a);
@@ -3664,8 +3679,8 @@ html[data-theme="dark"] .admin-record, html[data-theme="dark"] .customer-record,
 .customer-login-page .login-art {
   display: grid;
   place-items: center;
-  width: 100%;
-  min-height: 420px;
+  width: 100%;  
+  min-height: 390px;
   overflow: hidden;
   border-radius: 25px;
   background: linear-gradient(145deg, #073c41, #0b7479);
@@ -3689,26 +3704,26 @@ html[data-theme="dark"] .admin-record, html[data-theme="dark"] .customer-record,
   padding: 32px;
   border: 1px solid #1f2937;
   border-radius: 16px;
-  background: #111827;
+  background: #181E2B;
   box-shadow: 0 10px 30px rgba(0,0,0,0.35);
 }
 
 .customer-login-page .login-card h1 {
   margin: 12px 0 9px;
-  color: #163b43;
+  color: #FFFFFF;
   font-size: clamp(28px, 3vw, 35px);
   letter-spacing: -1px;
 }
 
 .customer-login-page .login-card > p {
   margin-bottom: 25px;
-  color: #718096;
+  color: #A5A9BC;
   font-size: 13px;
   line-height: 1.7;
 }
 
 .customer-login-page .login-card .eyebrow {
-  color: #0b8580;
+  color: #17A2B8;
 }
 
 .customer-login-page .login-card label {
@@ -3722,16 +3737,20 @@ html[data-theme="dark"] .admin-record, html[data-theme="dark"] .customer-record,
 .customer-login-page .login-card .input {
   height: 47px;
   padding: 0 13px;
-  border: 1px solid #dce5e9;
-  border-radius: 9px;
-  background: #f8fafc;
-  color: #1e293b;
-  font-size: 13px;
+  border: 1px solid #35445C;
+  border-radius: 8px;
+  background: #161F30;
+  color: #E5EAF2;
+  font-size: 12px;
+}
+
+.customer-login-page .login-card .input::placeholder {
+  color: #94a3b8;
 }
 
 .customer-login-page .login-card .input:focus {
-  border-color: #0b8580;
-  box-shadow: 0 0 0 3px #0b85801a;
+  border-color: #16A6B2;
+  box-shadow: 0 0 0 3px #16A6B21a;
 }
 
 .customer-login-page .login-password-field {
@@ -3741,48 +3760,47 @@ html[data-theme="dark"] .admin-record, html[data-theme="dark"] .customer-record,
 .customer-login-page .login-password-toggle {
   top: 11px;
   right: 12px;
-  color: #0b777d;
+  color: #ffffff;
   font-size: 12px;
   font-weight: 700;
 }
 
-.customer-login-page .btn-admin-login {
-  width: 100%;
+.customer-login-page .login-card .btn-admin-login,
+.customer-login-page .login-card .login-secondary-actions .btn {
+  height: 47px;
   min-height: 47px;
-  margin-top: 20px;
+  padding: 14px;
   border: none;
-  border-radius: 9px;
-  background: linear-gradient(135deg, #087c78, #12a6a0);
+  border-radius: 8px;
   color: #ffffff;
+  font-size: 13px;
   font-weight: 700;
-  box-shadow: 0 7px 17px #087c7828;
+  transition: transform 0.2s ease, filter 0.2s ease;
 }
 
-.customer-login-page .btn-admin-login:hover:not(:disabled) {
-  background: linear-gradient(135deg, #06635f, #078c86);
+.customer-login-page .login-card .btn-admin-login {
+  width: 100%;
+  margin-top: 20px;
+  background: linear-gradient(110deg, #087B83, #16A6B2);
+  box-shadow: 0 7px 17px #073c4128;
 }
 
 .customer-login-page .login-secondary-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 9px;
+  gap: 10px;
   margin-top: 17px;
 }
 
-.customer-login-page .login-secondary-actions .btn {
+.customer-login-page .login-card .login-secondary-actions .btn {
   flex: 1 1 130px;
-  min-height: 42px;
-  border: 1px solid #dce8e8;
-  border-radius: 8px;
-  background: #f0fdfa; 
-  color: #087c78;
-  font-size: 11px;
-  font-weight: 700;
+  background: linear-gradient(110deg, #087FCF, #16A6B2);
   white-space: normal;
 }
 
-.customer-login-page .login-secondary-actions .btn:hover {
-  background: #ccfbf1;
+.customer-login-page .login-card .btn-admin-login:hover:not(:disabled),
+.customer-login-page .login-card .login-secondary-actions .btn:hover:not(:disabled) {
+  filter: brightness(1.08);
 }
 
 .customer-login-page .login-footnote {
@@ -3885,6 +3903,18 @@ html[data-theme="dark"] .customer-hero-art,
 html[data-theme="dark"] .login-art,
 html[data-theme="dark"] .admin-hero,
 html[data-theme="dark"] .admin-brand-panel { background-color: #050505; }
+html[data-theme="dark"] .customer-login-page {
+  background: linear-gradient(135deg, #0f172a, #1e3a8a) !important;
+}
+html[data-theme="dark"] .customer-login-page .login-card {
+  background: #181E2B !important;
+  border-color: #1f2937 !important;
+}
+html[data-theme="dark"] .customer-login-page .login-card .input {
+  background-color: #161F30 !important;
+  border-color: #35445C !important;
+  color: #E5EAF2 !important;
+}
 html[data-theme="dark"] .muted-empty,
 html[data-theme="dark"] .customer-account-description,
 html[data-theme="dark"] .admin-record span,
@@ -3924,3 +3954,4 @@ html[data-theme="dark"] .profile-appearance button[aria-pressed="true"] { backgr
 .customer-mode .customer-cancel-button {
   border-radius: 8px;
 }
+
