@@ -3674,7 +3674,7 @@ html[data-theme="dark"] .admin-record, html[data-theme="dark"] .customer-record,
   min-height: calc(100vh - 76px);
   margin: 0;
   padding: clamp(28px, 5vw, 64px);
-  background: linear-gradient(135deg, #0f172a, #1e3a8a);
+  background: linear-gradient(15deg, #073c41, #0b7479);
 }
 
 .customer-login-page .login-art {
