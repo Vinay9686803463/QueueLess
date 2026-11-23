@@ -1,86 +1,204 @@
-# React + Vite
+# 🚀 QueueLess
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> A Smart Digital Queue and Appointment Management System that helps businesses manage customer appointments, waiting lists, and queues while providing customers with a convenient booking and queue-tracking experience.
 
-Currently, two official plugins are available:  
+## 📌 About the Project
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+QueueLess is a web-based queue and appointment management platform designed to simplify customer flow and reduce waiting time.
 
-## React Compiler
+The platform provides separate portals for administrators and customers. Businesses can manage their services, appointments, customers, and digital queues, while customers can book appointments and track their appointment status.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## ✨ Features
 
-## Expanding the ESLint configuration
+### 🏢 Business Management
+- Business dashboard and overview.
+- Business selection and management.
+- Service creation and management.
+- Business appointment management.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-# QueueLess
+### 👥 Customer Portal
+- Customer registration and login.
+- Browse available businesses and services.
+- Book appointments online.
+- View appointment history.
+- Track appointment status.
+- Access digital queue information.
 
-## Password reset setup
+### 📋 Queue Management
+- Digital queue and token management.
+- Waiting list management.
+- Queue overview.
+- Appointment status management.
+- Saved demo queue preview.
 
-Password reset OTP email is sent by the Flask backend over Gmail SMTP. Set
-`MAIL_SERVER`, `MAIL_PORT`, `MAIL_USE_TLS`, `MAIL_USERNAME`, `MAIL_PASSWORD`,
-and `MAIL_DEFAULT_SENDER` in `backend/.env`. Use a Gmail App Password, not your
-normal Gmail password. Keep credentials in the untracked `.env` file. Delivery
-fails with an explicit API error when the sender is not configured or cannot
-send mail.
+### 📅 Appointment Management
+- Online appointment booking.
+- Appointment scheduling.
+- View and manage appointments.
+- Customer appointment history.
+- Search customers using name, email, phone number, or appointment ID.
 
-The existing database must have the `password_reset_otps` table. For an
-existing database, apply only the `CREATE TABLE password_reset_otps` and its
-three following index statements from `database/schema.sql`; do not rerun
-unrelated schema changes just for password reset.
+### 🔐 Authentication
+- Separate customer and administrator portals.
+- Login and registration.
+- Token-based authentication using JWT.
+- Protected application routes.
 
-## Local admin queue demo data
+## 🛠️ Technologies Used
 
-The admin dashboard's **Generate 12 Demo Customers** and **Remove Demo Entries**
-actions are development-only. They are available only in the Vite development
-UI and when the backend has `FLASK_ENV=development`,
-`QUEUELESS_ENABLE_DEMO_DATA=true`, and a local database host (`localhost`,
-`127.0.0.1`, or `::1`). Demo actions are deliberately blocked for remote
-databases. Never point a local development server at a production database.
+### Frontend
+- React 19
+- React DOM
+- React Router DOM
+- JavaScript
+- CSS3
+- Vite
+- Axios
 
-Demo rows use a reserved `DEMO-` tracking-code namespace, have no customer or
-appointment association, and are tagged in the dashboard. Seeding the same
-business twice on the same UTC queue date is idempotent. Cleanup deletes only
-the selected business's marked demo queue rows; it does not delete businesses,
-services, customer accounts, appointments, or unmarked queue entries. No schema
-migration is needed for demo data.
+### Backend
+- Python
+- Flask
+- Flask-CORS
+- Flask-SQLAlchemy
+- SQLAlchemy
+- Gunicorn
 
-Pause/resume controls require the existing
-`database/migrations/001_add_queue_paused_to_businesses.sql` migration. The
+### Database
+- PostgreSQL
+- Supabase
+- psycopg2
 
-## Local demo businesses and queues
+### Authentication & Configuration
+- PyJWT
+- python-dotenv
 
-To create the eight fictional demo businesses, their four services, and twelve
-waiting demo queue entries per business, first point `backend/.env` at a
-dedicated local development database. Enable `QUEUELESS_ENABLE_DEMO_DATA=true`
-and keep `FLASK_ENV=development`. The script rejects remote databases and does
-not create or alter any admin or customer account. Use the existing active
-admin email to make the demo businesses available in that admin's business
-selector:
+### Testing & Development
+- Pytest
+- Vitest
+- React Testing Library
+- ESLint
+
+### Deployment
+- Vercel
+
+## 🏗️ Project Architecture
+
+QueueLess follows a frontend-backend architecture:
+
+1. **Frontend:** React application provides the customer and administrator interfaces.
+2. **Backend:** Flask handles API requests, authentication, business operations, and appointment management.
+3. **Database:** PostgreSQL stores application data and is hosted using Supabase.
+4. **Deployment:** Vercel is used to deploy the application.
+
+## 📂 Project Structure
+
+```text
+QueueLess/
+│
+├── backend/
+│   ├── app/
+│   │   ├── models/
+│   │   ├── routes/
+│   │   ├── services/
+│   │   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── database.py
+│   │   └── extensions.py
+│   │
+│   ├── tests/
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── src/
+│   │   ├── assets/
+│   │   ├── App.jsx
+│   │   ├── App.css
+│   │   ├── index.css
+│   │   └── main.jsx
+│   │
+│   ├── package.json
+│   └── index.html
+│
+├── database/
+├── vercel.json
+└── README.md
+```
+
+## ⚙️ Installation and Setup
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/Vinay9686803463/QueueLess.git
+```
+
+### 2. Navigate to the Project
+
+```bash
+cd QueueLess
+```
+
+### 3. Backend Setup
 
 ```bash
 cd backend
-python -m scripts.demo_businesses --dry-run
-python -m scripts.demo_businesses --owner-email <admin-email>
+python -m venv .venv
 ```
 
-Running the seed command again fills only missing marked demo businesses,
-services, and today's queue entries. Demo businesses have a `DEMO ·` name and
-a reserved `queueless.invalid` email; demo service descriptions and queue
-tracking codes are also marked. Demo customers exist only as fictional queue
-entries (no customer account records are created).
+Activate the virtual environment:
 
-Remove the marked demo data for that admin with:
+**Windows:**
+```bash
+.venv\Scripts\activate
+```
+
+**Linux / macOS:**
+```bash
+source .venv/bin/activate
+```
+
+Install dependencies:
 
 ```bash
-python -m scripts.demo_businesses --owner-email <admin-email> --cleanup
+pip install -r requirements.txt
 ```
 
-Cleanup removes only reserved demo queue entries with no customer or
-appointment association, and marked demo services that are not referenced by
-any queue entry or appointment. A demo business is deleted only when it has no
-remaining queue entries, appointments, services, or staff; otherwise it is
-preserved. The script commits seed/cleanup changes together in one transaction. The
-backend reports when that migration is missing instead of indicating that the
-queue is active.
+Configure the required environment variables in the backend `.env` file, including the PostgreSQL `DATABASE_URL` and authentication settings.
+
+Start the backend using the project's Flask entry point.
+
+### 4. Frontend Setup
+
+Open another terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### 5. Build Frontend
+
+```bash
+npm run build
+```
+
+## 🗄️ Database
+
+QueueLess uses PostgreSQL for persistent application data.
+
+Supabase provides the hosted PostgreSQL database.
+
+Database configuration is managed through environment variables. Do not upload `.env` files or database credentials to GitHub.
+
+## 🌐 Repository
+
+**GitHub:** https://github.com/Vinay9686803463/QueueLess
+
+## 🎯 Project Goal
+
+The main goal of QueueLess is to make appointment scheduling and queue management easier for businesses and customers by providing a centralized digital platform.
+
+---
+
+**QueueLess – Book Smart. Wait Less.**
