@@ -205,7 +205,7 @@ describe("QueueLess frontend", () => {
     expect(await screen.findByText(/Appointment ID: appointment-2/)).toBeInTheDocument();
     expect(screen.getByText(/Appointment time:/)).toBeInTheDocument();
     expect(screen.queryByText(/Estimated wait: To be confirmed/)).not.toBeInTheDocument();
-    await user.type(screen.getByPlaceholderText("Enter tracking code"), "track-code");
+    await user.type(screen.getByPlaceholderText("Enter tracking code or appointment ID"), "track-code");
     await user.click(screen.getByRole("button", { name: "Track token" }));
     expect(await screen.findByText("YOUR TOKEN")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalled();
@@ -1086,7 +1086,7 @@ describe("QueueLess frontend", () => {
     expect(screen.getByRole("heading", { name: "Real-Time Activity" })).toBeInTheDocument();
     expect(await screen.findByText(/Waiting Customer/)).toBeInTheDocument();
     expect(await screen.findByText(/Serving Customer/)).toBeInTheDocument();
-    expect(await screen.findAllByText(/Scheduled Customer/)).toHaveLength(2);
+    expect(await screen.findAllByText(/Scheduled Customer/)).toHaveLength(3);
 
     const waitForRequest = (path, method = "POST") =>
       waitFor(() => expect(fetch.mock.calls.some(
