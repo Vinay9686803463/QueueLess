@@ -2719,6 +2719,7 @@ html[data-theme="dark"] .admin-record, html[data-theme="dark"] .customer-record,
 .login-password-toggle {
   position: absolute;
   top: 10px;
+  color: #ffffff;
   right: 10px;
   border: 0;
   background: transparent;
@@ -3907,7 +3908,7 @@ html[data-theme="dark"] .customer-login-page {
   background: linear-gradient(135deg, #0f172a, #1e3a8a) !important;
 }
 html[data-theme="dark"] .customer-login-page .login-card {
-  background: #181E2B !important;
+  background: #111827 !important;
   border-color: #1f2937 !important;
 }
 html[data-theme="dark"] .customer-login-page .login-card .input {
