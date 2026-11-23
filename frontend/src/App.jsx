@@ -1525,7 +1525,7 @@ if (!canManageQueue) {
     <div
       className={`app-shell ${
         role === "admin" ? "admin-mode" : "customer-mode"
-      } admin-mode`}
+      }`}
     >
       <header className="topbar">
         <a
