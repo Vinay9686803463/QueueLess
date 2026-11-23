@@ -3665,7 +3665,7 @@ html[data-theme="dark"] .admin-record, html[data-theme="dark"] .customer-record,
   display: grid;
   place-items: center;
   width: 100%;
-  min-height: 430px;
+  min-height: 420px;
   overflow: hidden;
   border-radius: 25px;
   background: linear-gradient(145deg, #073c41, #0b7479);
@@ -3685,12 +3685,12 @@ html[data-theme="dark"] .admin-record, html[data-theme="dark"] .customer-record,
   justify-self: center;
   align-self: center;
   width: 100%;
-  max-width: 440px;
-  padding: 38px;
-  border: 1px solid #e2e8f0;
-  border-radius: 22px;
-  background: #ffffff;
-  box-shadow: 0 20px 55px rgba(15, 23, 42, 0.09);
+  max-width: 420px;
+  padding: 32px;
+  border: 1px solid #1f2937;
+  border-radius: 16px;
+  background: #111827;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
 }
 
 .customer-login-page .login-card h1 {
@@ -3714,7 +3714,7 @@ html[data-theme="dark"] .admin-record, html[data-theme="dark"] .customer-record,
 .customer-login-page .login-card label {
   display: block;
   margin: 15px 0 8px;
-  color: #334155;
+  color: #cbd5e1;
   font-size: 12px;
   font-weight: 700;
 }
