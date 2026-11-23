@@ -72,12 +72,16 @@ describe("QueueLess frontend", () => {
     localStorage.setItem("queueless_customer_token", "old-customer-token");
     vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
       if (String(url).includes("/api/health")) return jsonResponse({});
+      if (String(url).includes("/api/customer-auth/me")) {
+        return jsonResponse({ message: "Invalid or expired token" }, 401);
+      }
       return jsonResponse({ message: "not found" }, 404);
     });
 
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your customer session has expired. Please sign in again.");
     expect(await screen.findByText(/System online/i)).toBeInTheDocument();
     await waitFor(() => {
       expect(localStorage.getItem("queueless_token")).toBeNull();
@@ -263,6 +267,56 @@ describe("QueueLess frontend", () => {
     await user.click(screen.getByRole("button", { name: "Open account menu" }));
     await user.click(screen.getByRole("button", { name: "Log out" }));
     expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+  });
+
+  it("keeps the customer session on non-auth API errors and while navigating customer tabs", async () => {
+    localStorage.setItem("queueless_customer_token", "still-valid-token");
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const requestUrl = String(url);
+      if (requestUrl.includes("/api/health")) return jsonResponse({});
+      if (requestUrl.includes("/api/customer-auth/me")) {
+        return jsonResponse({ customer: { full_name: "Taylor Customer", email: "taylor@example.com" } });
+      }
+      if (requestUrl.includes("/api/customer-auth/appointments")) {
+        return jsonResponse({ message: "Temporarily unavailable" }, 503);
+      }
+      if (requestUrl.includes("/api/customer-auth/queue-tokens")) return jsonResponse({ tokens: [] });
+      return jsonResponse({ message: "not found" }, 404);
+    });
+
+    const firstRender = render(<App />);
+    expect(await screen.findByText(/You’re signed in/)).toBeInTheDocument();
+    for (const label of ["Overview", "My Account", "Upcoming", "History", "Queue Tokens", "Check In", "Track"]) {
+      await user.click(screen.getByRole("link", { name: new RegExp(label) }));
+      expect(localStorage.getItem("queueless_customer_token")).toBe("still-valid-token");
+    }
+
+    firstRender.unmount();
+    render(<App />);
+    expect(await screen.findByText(/You’re signed in/)).toBeInTheDocument();
+    expect(localStorage.getItem("queueless_customer_token")).toBe("still-valid-token");
+    expect(fetch).toHaveBeenCalled();
+  });
+
+  it("restores the saved theme and updates it immediately from Appearance", async () => {
+    localStorage.setItem("queueless_theme", "dark");
+    localStorage.setItem("queueless_customer_token", "theme-test-token");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const requestUrl = String(url);
+      if (requestUrl.includes("/api/health")) return jsonResponse({});
+      if (requestUrl.includes("/api/customer-auth/me")) return jsonResponse({ customer: { full_name: "Taylor" } });
+      if (requestUrl.includes("/api/customer-auth/appointments")) return jsonResponse({ appointments: [] });
+      if (requestUrl.includes("/api/customer-auth/queue-tokens")) return jsonResponse({ tokens: [] });
+      return jsonResponse({ message: "not found" }, 404);
+    });
+
+    render(<App />);
+    expect(await screen.findByText(/You’re signed in/)).toBeInTheDocument();
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    await user.click(screen.getByRole("button", { name: "Open account menu" }));
+    await user.click(screen.getByRole("button", { name: "Light" }));
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+    expect(localStorage.getItem("queueless_theme")).toBe("light");
   });
 
   it.each([

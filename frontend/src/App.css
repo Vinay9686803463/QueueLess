@@ -3956,3 +3956,237 @@ html[data-theme="dark"] .profile-appearance button[aria-pressed="true"] { backgr
   border-radius: 8px;
 }
 
+/* Customer appearance follows the selected app theme while retaining QueueLess branding. */
+.customer-mode {
+  --customer-page: #f3f6fa;
+  --customer-surface: #ffffff;
+  --customer-input: #ffffff;
+  --customer-ink: #172b35;
+  --customer-muted: #71818b;
+  --customer-line: #e4ebef;
+  --customer-record: #ffffff;
+  --customer-inset: #f8f5fc;
+}
+
+html[data-theme="dark"] .customer-mode {
+  --customer-page: #111a21;
+  --customer-surface: #1c2933;
+  --customer-input: #14212a;
+  --customer-ink: #e6edf3;
+  --customer-muted: #a8b6c2;
+  --customer-line: #33424d;
+  --customer-record: #18252e;
+  --customer-inset: #202c36;
+}
+
+html[data-theme="light"] .customer-mode {
+  --customer-page: #f3f6fa;
+  --customer-surface: #ffffff;
+  --customer-input: #ffffff;
+  --customer-ink: #172b35;
+  --customer-muted: #71818b;
+  --customer-line: #e4ebef;
+  --customer-record: #ffffff;
+  --customer-inset: #f8f5fc;
+}
+
+.customer-mode .customer-layout,
+.customer-mode .customer-main.customer-page {
+  background: var(--customer-page);
+  color: var(--customer-ink);
+}
+
+.customer-mode .customer-account-panel,
+.customer-mode .customer-record-panel,
+.customer-mode .customer-account,
+.customer-mode .checkin-card,
+.customer-mode .tracking-result {
+  background: var(--customer-surface);
+  color: var(--customer-ink);
+  border-color: var(--customer-line);
+}
+
+.customer-mode .customer-record,
+.customer-mode .tracking-result div {
+  background: var(--customer-record);
+  color: var(--customer-ink);
+  border-color: var(--customer-line);
+}
+
+.customer-mode .customer-account-panel h2,
+.customer-mode .customer-account-panel h3,
+.customer-mode .customer-record-panel h3,
+.customer-mode .customer-account > h3,
+.customer-mode .customer-record strong,
+.customer-mode .customer-profile strong {
+  color: var(--customer-ink);
+}
+
+.customer-mode .customer-account-description,
+.customer-mode .customer-record-panel > p,
+.customer-mode .customer-record span,
+.customer-mode .customer-record small,
+.customer-mode .customer-profile span {
+  color: var(--customer-muted);
+}
+
+.customer-mode .customer-main input,
+.customer-mode .customer-main select,
+.customer-mode .customer-main textarea,
+.customer-mode .customer-main .input {
+  background: var(--customer-input);
+  color: var(--customer-ink);
+  border-color: var(--customer-line);
+}
+
+.customer-mode .checkin-card,
+.customer-mode .checkin-card * {
+  color: var(--customer-ink);
+}
+
+.customer-mode .checkin-card .business-loader,
+.customer-mode .tracking-result div {
+  background: var(--customer-inset);
+}
+
+.customer-mode .checkin-card .submit-checkin,
+.customer-mode .checkin-card button.btn-purple {
+  color: #ffffff;
+}
+
+.customer-mode .customer-sidebar {
+  background: linear-gradient(180deg, #092f34, #073b40 58%, #06464b);
+}
+
+html[data-theme="light"] .customer-mode .customer-layout,
+html[data-theme="light"] .customer-mode .customer-main.customer-page {
+  background: var(--customer-page) !important;
+  color: var(--customer-ink) !important;
+}
+
+html[data-theme="light"] .customer-mode .customer-account-panel,
+html[data-theme="light"] .customer-mode .customer-record-panel,
+html[data-theme="light"] .customer-mode .customer-account,
+html[data-theme="light"] .customer-mode .checkin-card,
+html[data-theme="light"] .customer-mode .tracking-result,
+html[data-theme="light"] .customer-mode .profile-dropdown,
+html[data-theme="light"] .customer-mode .profile-identity {
+  background: var(--customer-surface) !important;
+  color: var(--customer-ink) !important;
+  border-color: var(--customer-line) !important;
+}
+
+html[data-theme="light"] .customer-mode .customer-record,
+html[data-theme="light"] .customer-mode .tracking-result div {
+  background: var(--customer-record) !important;
+  color: var(--customer-ink) !important;
+  border-color: var(--customer-line) !important;
+}
+
+html[data-theme="light"] .customer-mode .customer-main input,
+html[data-theme="light"] .customer-mode .customer-main select,
+html[data-theme="light"] .customer-mode .customer-main textarea,
+html[data-theme="light"] .customer-mode .customer-main .input {
+  background: var(--customer-input) !important;
+  color: var(--customer-ink) !important;
+  border-color: var(--customer-line) !important;
+}
+
+html[data-theme="light"] .customer-mode .customer-account-panel h2,
+html[data-theme="light"] .customer-mode .customer-account-panel h3,
+html[data-theme="light"] .customer-mode .customer-record-panel h3,
+html[data-theme="light"] .customer-mode .customer-record strong,
+html[data-theme="light"] .customer-mode .customer-profile strong,
+html[data-theme="light"] .customer-mode .profile-dropdown,
+html[data-theme="light"] .customer-mode .profile-dropdown strong {
+  color: var(--customer-ink) !important;
+}
+
+html[data-theme="light"] .customer-mode .customer-account-description,
+html[data-theme="light"] .customer-mode .customer-record-panel > p,
+html[data-theme="light"] .customer-mode .customer-record span,
+html[data-theme="light"] .customer-mode .customer-record small,
+html[data-theme="light"] .customer-mode .customer-profile span,
+html[data-theme="light"] .customer-mode .profile-dropdown small {
+  color: var(--customer-muted) !important;
+}
+
+html[data-theme="light"] .customer-mode .customer-sidebar {
+  background: linear-gradient(180deg, #092f34, #073b40 58%, #06464b) !important;
+}
+
+html[data-theme="dark"] .customer-mode .customer-main.customer-page {
+  background: var(--customer-page) !important;
+}
+
+html[data-theme="dark"] .customer-mode .customer-layout {
+  background: var(--customer-page) !important;
+}
+
+html[data-theme="dark"] .customer-mode .topbar {
+  background: linear-gradient(135deg, #0f172a, #1e3a8a) !important;
+}
+
+html[data-theme="dark"] .customer-mode .topbar .brand {
+  color: #ffffff;
+}
+
+html[data-theme="dark"] .customer-mode .customer-account-panel,
+html[data-theme="dark"] .customer-mode .customer-record-panel,
+html[data-theme="dark"] .customer-mode .customer-account,
+html[data-theme="dark"] .customer-mode .checkin-card,
+html[data-theme="dark"] .customer-mode .tracking-result {
+  background: var(--customer-surface) !important;
+  color: var(--customer-ink) !important;
+  border-color: var(--customer-line) !important;
+}
+
+html[data-theme="dark"] .customer-mode .customer-record,
+html[data-theme="dark"] .customer-mode .tracking-result div {
+  background: var(--customer-record) !important;
+  color: var(--customer-ink) !important;
+  border-color: var(--customer-line) !important;
+}
+
+html[data-theme="dark"] .customer-mode .customer-main input,
+html[data-theme="dark"] .customer-mode .customer-main select,
+html[data-theme="dark"] .customer-mode .customer-main textarea,
+html[data-theme="dark"] .customer-mode .customer-main .input {
+  background: var(--customer-input) !important;
+  color: var(--customer-ink) !important;
+  border-color: var(--customer-line) !important;
+}
+
+html[data-theme="dark"] .customer-mode .checkin-card .business-loader {
+  background: var(--customer-inset) !important;
+  border-color: var(--customer-line) !important;
+}
+
+html[data-theme="dark"] .customer-mode .customer-account-panel h2,
+html[data-theme="dark"] .customer-mode .customer-account-panel h3,
+html[data-theme="dark"] .customer-mode .customer-record-panel h3,
+html[data-theme="dark"] .customer-mode .customer-account > h3,
+html[data-theme="dark"] .customer-mode .customer-record strong,
+html[data-theme="dark"] .customer-mode .customer-profile strong,
+html[data-theme="dark"] .customer-mode .checkin-card * {
+  color: var(--customer-ink) !important;
+}
+
+html[data-theme="dark"] .customer-mode .customer-account-description,
+html[data-theme="dark"] .customer-mode .customer-record-panel > p,
+html[data-theme="dark"] .customer-mode .customer-record span,
+html[data-theme="dark"] .customer-mode .customer-record small,
+html[data-theme="dark"] .customer-mode .customer-profile span,
+html[data-theme="dark"] .customer-mode .checkin-card .privacy-note {
+  color: var(--customer-muted) !important;
+}
+
+html[data-theme="dark"] .customer-mode .checkin-card .submit-checkin,
+html[data-theme="dark"] .customer-mode .checkin-card button.btn-purple {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .customer-mode .customer-sidebar {
+  background: linear-gradient(180deg, #092f34, #073b40 58%, #06464b) !important;
+}
+

@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 
 const API_BASE = import.meta.env.DEV
@@ -234,7 +234,11 @@ function getLocalDateISO(date = new Date()) {
 }
 
 export default function App() {
-  const [theme, setTheme] = useState(() => localStorage.getItem("queueless_theme") || (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem("queueless_theme");
+    if (savedTheme === "light" || savedTheme === "dark") return savedTheme;
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
   const [role, setRole] = useState(
@@ -339,10 +343,20 @@ const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_c
   });
   const [editingServiceId, setEditingServiceId] = useState("");
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("queueless_theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    const syncTheme = (event) => {
+      if (event.key === "queueless_theme" && (event.newValue === "light" || event.newValue === "dark")) {
+        setTheme(event.newValue);
+      }
+    };
+    window.addEventListener("storage", syncTheme);
+    return () => window.removeEventListener("storage", syncTheme);
+  }, []);
 
   useEffect(() => {
     const outside = (event) => { if (!profileRef.current?.contains(event.target)) setProfileOpen(false); };
@@ -368,6 +382,9 @@ const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_c
         api("/customer-auth/queue-tokens", {}, authToken),
       ]);
 
+      // Ignore late responses from a session that was logged out or replaced.
+      if (customerTokenRef.current !== authToken) return;
+
       if (appointmentsResult.status === "fulfilled") {
         setCustomerAppointments(appointmentsResult.value.appointments || []);
       }
@@ -380,13 +397,14 @@ const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_c
       );
       if (firstRejection) {
         const error = firstRejection.reason;
-        if (error?.status === 401 || error?.status === 403) {
+        if (error?.status === 401) {
           customerTokenRef.current = "";
           restoredCustomerSession.current = false;
           setCustomerToken("");
           setCustomerProfile(null);
           setCustomerAppointments([]);
           setCustomerTokens([]);
+          setCustomerLoginError("Your customer session has expired. Please sign in again.");
         }
         throw error;
       }
@@ -398,7 +416,7 @@ const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_c
   useEffect(() => {
     if (!customerToken || customerProfile || !restoredCustomerSession.current) return;
     let active = true;
-    api("/customer-auth/me", {}, customerToken).then((data) => { if (active) { setCustomerProfile(data.customer || null); loadCustomerAccount(customerToken).catch(() => {}); } }).catch((error) => { if (!active || customerTokenRef.current !== customerToken) return; const status = error?.status; if (!status) return; if (![401, 403, 404].includes(status)) return; setCustomerProfile(null); setCustomerToken(""); customerTokenRef.current = ""; setCustomerAppointments([]); setCustomerTokens([]); });
+    api("/customer-auth/me", {}, customerToken).then((data) => { if (active) { setCustomerProfile(data.customer || null); loadCustomerAccount(customerToken).catch(() => {}); } }).catch((error) => { if (!active || customerTokenRef.current !== customerToken || error?.status !== 401) return; setCustomerProfile(null); setCustomerToken(""); customerTokenRef.current = ""; setCustomerAppointments([]); setCustomerTokens([]); setCustomerLoginError("Your customer session has expired. Please sign in again."); });
     return () => { active = false; };
   }, [customerToken, customerProfile, loadCustomerAccount]);
 
@@ -841,8 +859,6 @@ useEffect(() => {
     customerLoginInFlight.current = true;
     setCustomerLoginLoading(true);
     setCustomerLoginError("");
-    setCustomerToken("");
-    customerTokenRef.current = "";
     setCustomerAppointments([]);
     setCustomerTokens([]);
 
