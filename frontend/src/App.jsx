@@ -362,7 +362,7 @@ const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_c
   useEffect(() => {
     if (!customerToken || customerProfile || !restoredCustomerSession.current) return;
     let active = true;
-    api("/customer-auth/me", {}, customerToken).then((data) => { if (active) setCustomerProfile(data.customer || null); }).catch((error) => { if (!active || customerTokenRef.current !== customerToken) return; const status = error?.status; if (!status) return; if (![401, 403].includes(status)) return; setCustomerProfile(null); setCustomerToken(""); customerTokenRef.current = ""; setCustomerAppointments([]); setCustomerTokens([]); });
+    api("/customer-auth/me", {}, customerToken).then((data) => { if (active) setCustomerProfile(data.customer || null); }).catch((error) => { if (!active || customerTokenRef.current !== customerToken) return; const status = error?.status; if (!status) return; if (![401, 403, 404].includes(status)) return; setCustomerProfile(null); setCustomerToken(""); customerTokenRef.current = ""; setCustomerAppointments([]); setCustomerTokens([]); });
     return () => { active = false; };
   }, [customerToken, customerProfile]);
 
