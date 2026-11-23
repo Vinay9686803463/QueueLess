@@ -5,6 +5,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from ..extensions import db
+from ..utils.display import clean_demo_service_description
 from .auth import token_required
 
 
@@ -60,6 +61,9 @@ def serialize_service(row):
     if row is None:
         return None
     service = dict(row)
+    service["description"] = clean_demo_service_description(
+        service.get("description")
+    )
     for field in ("created_at", "updated_at"):
         value = service.get(field)
         if value is not None and hasattr(value, "isoformat"):

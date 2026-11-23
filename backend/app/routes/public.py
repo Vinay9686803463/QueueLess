@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from ..extensions import db
+from ..utils.display import clean_demo_service_description
 from ..utils.rate_limit import rate_limiter
 from .appointments import (
     parse_datetime,
@@ -164,7 +165,14 @@ def public_business_services(business_id):
         WHERE b.id=:business_id AND b.is_active=TRUE AND s.is_active=TRUE
         ORDER BY s.service_name
     """), {"business_id": business_id}).mappings().all()
-    return jsonify({"services": [dict(row) for row in rows]}), 200
+    services = []
+    for row in rows:
+        service = dict(row)
+        service["description"] = clean_demo_service_description(
+            service.get("description")
+        )
+        services.append(service)
+    return jsonify({"services": services}), 200
 
 
 @public_bp.route("/availability", methods=["GET"])
