@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 
 const API_BASE = import.meta.env.DEV
@@ -790,7 +790,7 @@ useEffect(() => {
     }
   };
 
-  const loadCustomerAccount = async (authToken) => {
+  const loadCustomerAccount = useCallback(async (authToken) => {
     try {
       const [appointments, queueTokens] = await Promise.all([
         api("/customer-auth/appointments", {}, authToken),
@@ -809,7 +809,7 @@ useEffect(() => {
       }
       throw error;
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!customerToken) return undefined;
@@ -817,7 +817,7 @@ useEffect(() => {
       loadCustomerAccount(customerToken).catch((err) => notify(err.message));
     }, 15000);
     return () => window.clearInterval(timer);
-  }, [customerToken]);
+  }, [customerToken, loadCustomerAccount]);
 
   const customerLogin = async (e) => {
     e.preventDefault();
@@ -917,7 +917,7 @@ useEffect(() => {
     notify("You have been logged out");
   };
 
-  const loadBusinesses = async () => {
+  const loadBusinesses = useCallback(async () => {
     setBusinessesLoading(true);
     setBusinessesError("");
     try {
@@ -966,7 +966,7 @@ useEffect(() => {
     } finally {
       setBusinessesLoading(false);
     }
-  };
+  }, [token]);
 
   const seedDemoBusiness = async (businessId, authToken = token) => {
     if (!import.meta.env.DEV || !businessId) return null;
@@ -1472,12 +1472,14 @@ if (!canManageQueue) {
 
   /* Maintain sessions when switching browser tabs */
   const loadBusinessesRef = useRef(loadBusinesses);
+  const loadBusinessDataRef = useRef(loadBusinessData);
   const loadCustomerAccountRef = useRef(loadCustomerAccount);
 
   useEffect(() => {
     loadBusinessesRef.current = loadBusinesses;
+    loadBusinessDataRef.current = loadBusinessData;
     loadCustomerAccountRef.current = loadCustomerAccount;
-  }, [loadBusinesses, loadCustomerAccount]);
+  });
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -1497,7 +1499,9 @@ if (!canManageQueue) {
             setAdminProfile(null);
           });
         if (selectedBusinessId) {
-          loadBusinessData(selectedBusinessId, token, { quiet: true }).catch(() => {});
+          loadBusinessDataRef.current
+            ?. (selectedBusinessId, token, { quiet: true })
+            .catch(() => {});
         } else {
           loadBusinessesRef.current?.().catch(() => {});
         }

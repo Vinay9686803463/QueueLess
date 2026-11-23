@@ -3905,11 +3905,6 @@ html[data-theme="dark"] .profile-appearance button[aria-pressed="true"] { backgr
   padding-top: 0;
 }
 
-.customer-mode .customer-sidebar,
-.customer-sidebar {
-  /* inherits admin sidebar styling */
-}
-
 .customer-mode .customer-sidebar .sidebar-caption,
 .customer-sidebar .sidebar-caption {
   color: #82aab2;
