@@ -770,7 +770,9 @@ def seed_demo_queue(business_id):
 
         services = db.session.execute(
             text("""
-                SELECT id::text AS id
+                SELECT
+                    id::text AS id,
+                    COALESCE(duration_minutes, 60) AS duration_minutes
                 FROM services
                 WHERE business_id = :business_id AND is_active = TRUE
                 ORDER BY created_at, id
@@ -787,11 +789,17 @@ def seed_demo_queue(business_id):
         compact_id = business_id.replace("-", "")
         marker_prefix = f"DEMO-GENERATED:{compact_id}:"
         existing_appointments = db.session.execute(text("""
-            SELECT id::text AS id, notes, service_id::text AS service_id,
-                   scheduled_at, COALESCE(duration_minutes, 60) AS duration_minutes
-            FROM appointments
-            WHERE business_id = :business_id AND notes LIKE :marker_prefix
-            FOR UPDATE
+            SELECT
+                a.id::text AS id,
+                a.notes,
+                a.service_id::text AS service_id,
+                a.scheduled_at,
+                COALESCE(s.duration_minutes, 60) AS duration_minutes
+            FROM appointments a
+            LEFT JOIN services s ON s.id = a.service_id
+            WHERE a.business_id = :business_id
+              AND a.notes LIKE :marker_prefix
+            FOR UPDATE OF a
         """), {"business_id": business_id, "marker_prefix": f"{marker_prefix}%"}).mappings().all()
         appointments_by_index = {}
         for appointment in existing_appointments:
@@ -804,9 +812,11 @@ def seed_demo_queue(business_id):
         already_generated = len(appointments_by_index)
 
         occupied = db.session.execute(text("""
-            SELECT a.scheduled_at,
-                   COALESCE(a.duration_minutes, s.duration_minutes) AS duration_minutes
-            FROM appointments a JOIN services s ON s.id = a.service_id
+            SELECT
+                a.scheduled_at,
+                COALESCE(s.duration_minutes, 60) AS duration_minutes
+            FROM appointments a
+            JOIN services s ON s.id = a.service_id
             WHERE a.business_id = :business_id
               AND a.status IN ('booked','confirmed','checked_in')
         """), {"business_id": business_id}).mappings().all()
@@ -849,16 +859,32 @@ def seed_demo_queue(business_id):
                 segment_start = max(segment_start, conflict_end)
             if day_close > segment_start:
                 segments.append((segment_start, day_close))
-            # Do not split a consecutive demo run around a real appointment.
-            chosen = next(((start, end) for start, end in segments if end - start >= timedelta(hours=1)), None)
-            if chosen:
-                start, end = chosen
-                count = min(len(pending), int((end - start).total_seconds() // 3600))
-                for offset in range(count):
-                    idx = pending.pop(0)
-                    slot_start = start + timedelta(hours=offset)
-                    slots[idx] = slot_start
-                    intervals.append((slot_start, slot_start + timedelta(hours=1)))
+            # Allocate each demo appointment using its selected service duration.
+            for idx in list(pending):
+                service_duration = max(
+                    1,
+                    int(services[(idx - 1) % len(services)]["duration_minutes"] or 60),
+                )
+                required_time = timedelta(minutes=service_duration)
+
+                segment_index = next(
+                    (
+                        position
+                        for position, (start, end) in enumerate(segments)
+                        if end - start >= required_time
+                    ),
+                    None,
+                )
+                if segment_index is None:
+                    continue
+
+                slot_start, segment_end = segments[segment_index]
+                slot_end = slot_start + required_time
+
+                slots[idx] = slot_start
+                intervals.append((slot_start, slot_end))
+                segments[segment_index] = (slot_end, segment_end)
+                pending.remove(idx)
             cursor_day += timedelta(days=1)
             search_days += 1
         if pending:
@@ -890,10 +916,10 @@ def seed_demo_queue(business_id):
                 appointment = db.session.execute(text("""
                     INSERT INTO appointments (
                         business_id,service_id,customer_name,customer_phone,customer_email,
-                        customer_id,scheduled_at,duration_minutes,status,notes
+                        customer_id,scheduled_at,status,notes
                     ) VALUES (
                         :business_id,:service_id,:name,:phone,:email,:customer_id,
-                        :scheduled_at,60,'confirmed',:notes
+                        :scheduled_at,'confirmed',:notes
                     ) RETURNING id::text AS id, scheduled_at, service_id::text AS service_id
                 """), {"business_id": business_id, "service_id": service_id,
                        "name": display_name, "phone": phone, "email": email,
@@ -907,7 +933,7 @@ def seed_demo_queue(business_id):
                 db.session.execute(text("""
                     UPDATE appointments SET customer_id=:customer_id,
                         customer_name=:name, customer_phone=:phone, customer_email=:email,
-                        service_id=:service_id, duration_minutes=60, updated_at=NOW()
+                        service_id=:service_id, updated_at=NOW()
                     WHERE id=:appointment_id
                 """), {"customer_id": customer["id"], "name": display_name,
                        "phone": phone, "email": email, "service_id": service_id,
