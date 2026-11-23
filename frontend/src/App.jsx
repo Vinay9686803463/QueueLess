@@ -281,6 +281,7 @@ const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_c
   const [booking, setBooking] = useState(null);
   const [trackingCode, setTrackingCode] = useState("");
   const [trackedToken, setTrackedToken] = useState(null);
+  const [trackedAppointment, setTrackedAppointment] = useState(null);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -666,9 +667,41 @@ useEffect(() => {
 
   const track = async (e) => {
     e.preventDefault();
+    const lookup = trackingCode.trim();
+
+    setTrackedToken(null);
+    setTrackedAppointment(null);
+
+    // Appointment UUIDs are private: only look them up in the
+    // currently signed-in customer's own appointment list.
+    const isAppointmentId =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(lookup);
+
+    if (isAppointmentId) {
+      if (!customerToken) {
+        setTrackedToken({
+          error: "Sign in to your customer account to track an appointment ID.",
+        });
+        return;
+      }
+
+      const appointment = customerAppointments.find(
+        (item) => String(item.id).toLowerCase() === lookup.toLowerCase()
+      );
+
+      if (!appointment) {
+        setTrackedToken({
+          error: "Appointment not found in your account. Please check the ID and sign in with the account used to book it.",
+        });
+        return;
+      }
+
+      setTrackedAppointment(appointment);
+      return;
+    }
 
     try {
-      const data = await api(`/public/track/${trackingCode}`);
+      const data = await api(`/public/track/${encodeURIComponent(lookup)}`);
       setTrackedToken(data.tracking || data);
     } catch (err) {
       setTrackedToken({ error: err.message });
@@ -1314,6 +1347,79 @@ if (!canManageQueue) {
     [adminAppointments, queue]
   );
 
+  const [customerSearch, setCustomerSearch] = useState("");
+
+  // Customer directory is derived from appointments already restricted
+  // to the currently selected business by the admin appointments API.
+  const adminCustomers = useMemo(() => {
+    const grouped = new Map();
+
+    adminAppointments.forEach((appointment) => {
+      const key = String(
+        appointment.customer_id ||
+        appointment.customer_email ||
+        appointment.customer_phone ||
+        appointment.id
+      ).trim().toLowerCase();
+
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          key,
+          name: appointment.customer_name || "Customer",
+          email: appointment.customer_email || "",
+          phone: appointment.customer_phone || "",
+          appointments: [],
+        });
+      }
+
+      const customer = grouped.get(key);
+      if (!customer.email && appointment.customer_email) {
+        customer.email = appointment.customer_email;
+      }
+      if (!customer.phone && appointment.customer_phone) {
+        customer.phone = appointment.customer_phone;
+      }
+      if (
+        (!customer.name || customer.name === "Customer") &&
+        appointment.customer_name
+      ) {
+        customer.name = appointment.customer_name;
+      }
+      customer.appointments.push(appointment);
+    });
+
+    return Array.from(grouped.values())
+      .map((customer) => ({
+        ...customer,
+        appointments: customer.appointments.slice().sort(
+          (a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at)
+        ),
+      }))
+      .sort((a, b) => b.appointments.length - a.appointments.length);
+  }, [adminAppointments]);
+
+  const filteredAdminCustomers = useMemo(() => {
+    const query = customerSearch.trim().toLowerCase();
+    if (!query) return adminCustomers;
+
+    return adminCustomers.filter((customer) => {
+      const customerFields = [
+        customer.name,
+        customer.email,
+        customer.phone,
+        ...customer.appointments.flatMap((appointment) => [
+          appointment.id,
+          appointment.service_name,
+          appointment.status,
+        ]),
+      ];
+
+      return customerFields.some((value) =>
+        String(value || "").toLowerCase().includes(query)
+      );
+    });
+  }, [adminCustomers, customerSearch]);
+
   return (
     <div
       className={`app-shell ${
@@ -1901,15 +2007,14 @@ if (!canManageQueue) {
               </span>
               <h2>Track your place in line</h2>
               <p>
-                Enter the tracking code you received after joining
-                the queue.
+                Enter your queue tracking code, or an appointment ID while signed in to your customer account.
               </p>
             </div>
 
             <form className="track-form" onSubmit={track}>
               <input
                 className="input"
-                placeholder="Enter tracking code"
+                placeholder="Enter tracking code or appointment ID"
                 value={trackingCode}
                 onChange={(e) => setTrackingCode(e.target.value)}
                 required
@@ -1918,6 +2023,35 @@ if (!canManageQueue) {
                 Track token
               </button>
             </form>
+
+            {trackedAppointment && (
+              <div className="tracking-result">
+                <div>
+                  <small>APPOINTMENT</small>
+                  <strong>{trackedAppointment.service_name || "Appointment"}</strong>
+                </div>
+                <div>
+                  <small>BUSINESS</small>
+                  <strong>{trackedAppointment.business_name || "QueueLess business"}</strong>
+                </div>
+                <div>
+                  <small>DATE & TIME</small>
+                  <strong>
+                    {trackedAppointment.scheduled_at
+                      ? new Date(trackedAppointment.scheduled_at).toLocaleString()
+                      : "Not available"}
+                  </strong>
+                </div>
+                <div>
+                  <small>STATUS</small>
+                  <strong>{trackedAppointment.status}</strong>
+                </div>
+                <div>
+                  <small>APPOINTMENT ID</small>
+                  <strong>{trackedAppointment.id}</strong>
+                </div>
+              </div>
+            )}
 
             {trackedToken &&
               (trackedToken.error ? (
@@ -2158,6 +2292,9 @@ if (!canManageQueue) {
               </a>
               <a href="#schedule">
                 <Icon>▣</Icon>Schedule
+              </a>
+              <a href="#customers">
+                <Icon>♙</Icon>Customers
               </a>
               <a href="#activity">
                 <Icon>◷</Icon>Real-Time Activity
@@ -2855,6 +2992,91 @@ if (!canManageQueue) {
                       ))}
                   </div>
                 ) : <p className="muted-empty">No appointments are scheduled for this business.</p>}
+              </div>
+
+              <div className="dashboard-panel" id="customers">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Customers</h2>
+                    <p>Customer details and appointment history for this business</p>
+                  </div>
+                  <span className="panel-icon">{adminCustomers.length}</span>
+                </div>
+
+                <div style={{ margin: "16px 0" }}>
+                  <input
+                    type="search"
+                    value={customerSearch}
+                    onChange={(event) => setCustomerSearch(event.target.value)}
+                    placeholder="Search name, email, phone or appointment ID..."
+                    aria-label="Search customers and appointment IDs"
+                    style={{
+                      width: "100%",
+                      boxSizing: "border-box",
+                      padding: "12px 14px",
+                      border: "1px solid var(--border-color, #d1d5db)",
+                      borderRadius: "10px",
+                      font: "inherit",
+                    }}
+                  />
+                  {customerSearch && (
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      onClick={() => setCustomerSearch("")}
+                      style={{ marginTop: "8px" }}
+                    >
+                      Clear search
+                    </button>
+                  )}
+                  <p className="muted-empty" aria-live="polite">
+                    Showing {filteredAdminCustomers.length} of {adminCustomers.length} customers
+                  </p>
+                </div>
+
+                {appointmentsError ? (
+                  <p className="muted-empty">
+                    Customer details could not be loaded: {appointmentsError}
+                  </p>
+                ) : dashboardLoading ? (
+                  <p className="muted-empty" role="status">Loading customers...</p>
+                ) : filteredAdminCustomers.length ? (
+                  <div className="admin-schedule-list">
+                    {filteredAdminCustomers.map((customer) => (
+                      <article className="admin-record" key={customer.key}>
+                        <div>
+                          <strong>{customer.name}</strong>
+                          <span>{customer.email || "Email not provided"}</span>
+                          <span>{customer.phone || "Phone not provided"}</span>
+                          <span>
+                            {customer.appointments.length} appointment(s)
+                          </span>
+                          <div className="customer-history-list">
+                            {customer.appointments.map((appointment) => (
+                              <div key={appointment.id}>
+                                <span>
+                                  {appointment.service_name || "Appointment"}
+                                  {" · "}
+                                  {appointment.status}
+                                </span>
+                                <span>
+                                  {appointment.scheduled_at
+                                    ? new Date(appointment.scheduled_at).toLocaleString()
+                                    : "Date not available"}
+                                </span>
+                                <small>Appointment ID: {appointment.id}</small>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="muted-empty">
+                    {customerSearch.trim() ? "No customers match your search." : "No customer appointments have been recorded for this business yet."}
+                  </p>
+                )}
               </div>
 
               <div className="dashboard-panel" id="activity">
