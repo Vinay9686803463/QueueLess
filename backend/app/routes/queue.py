@@ -653,36 +653,87 @@ def get_queue(business_id):
         selected_date = today
 
     try:
+        queue_select = """
+            SELECT
+                qt.id::text AS id,
+                qt.business_id::text AS business_id,
+                qt.service_id::text AS service_id,
+                qt.appointment_id::text AS appointment_id,
+                qt.customer_name,
+                qt.customer_phone,
+                qt.tracking_code LIKE 'DEMO-%' AS is_demo,
+                qt.token_number,
+                qt.queue_date,
+                qt.tracking_code,
+                qt.status,
+                qt.joined_at,
+                qt.called_at,
+                qt.service_started_at,
+                qt.completed_at,
+                qt.created_at,
+                qt.updated_at,
+                s.service_name,
+                s.duration_minutes
+            FROM queue_tokens qt
+            JOIN services s ON s.id = qt.service_id
+            WHERE qt.business_id = :business_id
+              AND qt.queue_date = :queue_date
+              AND (:demo_only = FALSE OR qt.tracking_code LIKE 'DEMO-%')
+            ORDER BY qt.token_number ASC
+        """
         rows = db.session.execute(
-            text("""
-                SELECT
-                    qt.id::text AS id,
-                    qt.business_id::text AS business_id,
-                    qt.service_id::text AS service_id,
-                    qt.appointment_id::text AS appointment_id,
-                    qt.customer_name,
-                    qt.customer_phone,
-                    qt.tracking_code LIKE 'DEMO-%' AS is_demo,
-                    qt.token_number,
-                    qt.queue_date,
-                    qt.tracking_code,
-                    qt.status,
-                    qt.joined_at,
-                    qt.called_at,
-                    qt.service_started_at,
-                    qt.completed_at,
-                    qt.created_at,
-                    qt.updated_at,
-                    s.service_name,
-                    s.duration_minutes
-                FROM queue_tokens qt
-                JOIN services s ON s.id = qt.service_id
-                WHERE qt.business_id = :business_id
-                  AND qt.queue_date = :queue_date
-                ORDER BY qt.token_number ASC
-            """),
-            {"business_id": business_id, "queue_date": selected_date},
+            text(queue_select),
+            {
+                "business_id": business_id,
+                "queue_date": selected_date,
+                "demo_only": False,
+            },
         ).mappings().all()
+
+        is_demo_preview = False
+
+        # If today's demo queue is empty, show the latest saved demo queue
+        # as a read-only preview. Never use this fallback for real businesses.
+        if not rows and selected_date == today:
+            demo_business = db.session.execute(
+                text("""
+                    SELECT 1
+                    FROM businesses
+                    WHERE id = :business_id
+                      AND description LIKE :marker
+                    LIMIT 1
+                """),
+                {
+                    "business_id": business_id,
+                    "marker": "DEMO-GENERATED:QUEUELESS-PRODUCTION-V1%",
+                },
+            ).scalar()
+
+            if demo_business:
+                latest_demo_date = db.session.execute(
+                    text("""
+                        SELECT MAX(queue_date)
+                        FROM queue_tokens
+                        WHERE business_id = :business_id
+                          AND tracking_code LIKE 'DEMO-%'
+                    """),
+                    {"business_id": business_id},
+                ).scalar()
+
+                if latest_demo_date:
+                    preview_rows = db.session.execute(
+                        text(queue_select),
+                        {
+                            "business_id": business_id,
+                            "queue_date": latest_demo_date,
+                            "demo_only": True,
+                        },
+                    ).mappings().all()
+
+                    if preview_rows:
+                        rows = preview_rows
+                        selected_date = latest_demo_date
+                        is_demo_preview = True
 
         waiting = []
         called = []
@@ -713,6 +764,7 @@ def get_queue(business_id):
             "status": "success",
             "business_id": business_id,
             "queue_date": selected_date.isoformat(),
+            "is_demo_preview": is_demo_preview,
             "queue_paused": (
                 _is_queue_paused(business_id) if queue_pause_supported else False
             ),

@@ -261,8 +261,10 @@ const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_c
   const [appointmentsError, setAppointmentsError] = useState("");
   const [queue, setQueue] = useState([]);
   const [queueDate, setQueueDate] = useState(() => getLocalDateISO());
+  const [queuePreviewDate, setQueuePreviewDate] = useState("");
   const queueDateManuallySelected = useRef(false);
   const isTodayQueue = queueDate === getLocalDateISO();
+  const canManageQueue = isTodayQueue && !queuePreviewDate;
   const [queuePaused, setQueuePaused] = useState(false);
   const [queuePauseSupported, setQueuePauseSupported] = useState(true);
   const [businessesLoading, setBusinessesLoading] = useState(false);
@@ -900,6 +902,7 @@ useEffect(() => {
   ) => {
     if (!businessId) {
       setQueue([]);
+      setQueuePreviewDate("");
       setQueuePaused(false);
       setQueuePauseSupported(true);
       setAdminServices([]);
@@ -942,9 +945,13 @@ useEffect(() => {
 
       if (queueResult.status === "fulfilled") {
         setQueue(getQueueRows(queueResult.value));
+        setQueuePreviewDate(
+          queueResult.value.is_demo_preview ? queueResult.value.queue_date : ""
+        );
         setQueuePaused(queueResult.value.queue_paused || false);
         setQueuePauseSupported(queueResult.value.queue_pause_supported !== false);
       } else {
+        setQueuePreviewDate("");
         notify(queueResult.reason?.message || "Unable to retrieve queue");
       }
 
@@ -995,6 +1002,7 @@ useEffect(() => {
   useEffect(() => {
     if (selectedBusinessId && token) {
       setQueue([]);
+      setQueuePreviewDate("");
       setQueuePaused(false);
       setQueuePauseSupported(true);
       setAdminServices([]);
@@ -1003,6 +1011,7 @@ useEffect(() => {
       loadBusinessData(selectedBusinessId);
     } else if (!selectedBusinessId) {
       setQueue([]);
+      setQueuePreviewDate("");
       setQueuePaused(false);
       setQueuePauseSupported(true);
       setAdminServices([]);
@@ -1046,7 +1055,7 @@ useEffect(() => {
 
   const performQueueAction = async (actionKey, requestPath, successMessage) => {
     if (!selectedBusinessId || queueMutationInFlight.current) return;
-if (!isTodayQueue) {
+if (!canManageQueue) {
   notify("Only today's queue can be managed. Future and historical queue records are read-only.");
   return;
 }
@@ -1065,7 +1074,7 @@ if (!isTodayQueue) {
   };
 
   const callNext = async () => {
-    if (!isTodayQueue) return;
+    if (!canManageQueue) return;
     if (queuePaused) {
       notify("Resume the queue before calling the next customer.");
       return;
@@ -1078,7 +1087,7 @@ if (!isTodayQueue) {
   };
 
   const queueAction = async (tokenId, action) => {
-    if (!isTodayQueue) return;
+    if (!canManageQueue) return;
     const successMessages = {
       complete: "Service completed",
       skip: "Queue entry skipped",
@@ -1092,7 +1101,7 @@ if (!isTodayQueue) {
   };
 
   const pauseQueue = async () => {
-    if (!isTodayQueue) return;
+    if (!canManageQueue) return;
     await performQueueAction(
       "pause",
       `/businesses/${selectedBusinessId}/queue/pause`,
@@ -1101,7 +1110,7 @@ if (!isTodayQueue) {
   };
 
   const resumeQueue = async () => {
-    if (!isTodayQueue) return;
+    if (!canManageQueue) return;
     await performQueueAction(
       "resume",
       `/businesses/${selectedBusinessId}/queue/resume`,
@@ -1187,7 +1196,7 @@ if (!isTodayQueue) {
   };
 
   const runDemoQueueAction = async (method) => {
-    if (!isTodayQueue) return;
+    if (!canManageQueue) return;
     if (!selectedBusinessId || demoActionLoading) return;
     setDemoActionLoading(true);
     try {
@@ -2233,7 +2242,7 @@ if (!isTodayQueue) {
                   onClick={callNext}
                   disabled={
                     !selectedBusinessId ||
-                    !isTodayQueue ||
+                    !canManageQueue ||
                     queuePaused ||
                     Boolean(queueActionLoading)}
                 >
@@ -2368,11 +2377,13 @@ if (!isTodayQueue) {
                 <div className="panel-heading">
                   <div>
                     <h2>
-                      {isTodayQueue
-                        ? "Live waiting list"
-                        : queueDate > getLocalDateISO()
-                          ? "Scheduled queue preview"
-                          : "Queue history"}
+                      {queuePreviewDate
+                        ? "Saved demo queue preview"
+                        : isTodayQueue
+                          ? "Live waiting list"
+                          : queueDate > getLocalDateISO()
+                            ? "Scheduled queue preview"
+                            : "Queue history"}
                     </h2>
                     <p>
                       {selectedBusiness?.business_name ||
@@ -2391,14 +2402,19 @@ if (!isTodayQueue) {
 
                         queueDateManuallySelected.current =
                           nextDate !== getLocalDateISO();
+                        setQueuePreviewDate("");
 
                         setQueueDate(nextDate);
                       }}
                   />
                     </label>
-                    {!isTodayQueue && (
-                     <small>Future and historical queue records are read-only. Select today's date to manage the live queue.</small>
-                    )}
+                    {queuePreviewDate ? (
+                      <small>
+                        No queue entries exist for today. Showing saved demo records from {queuePreviewDate}; this preview is read-only.
+                      </small>
+                    ) : !canManageQueue ? (
+                      <small>Future and historical queue records are read-only. Select today's date to manage the live queue.</small>
+                    ) : null}
                   </div>
 
                   <span
@@ -2415,7 +2431,7 @@ if (!isTodayQueue) {
                   <button
                     className="btn btn-teal"
                     onClick={callNext}
-                    disabled={!selectedBusinessId || !isTodayQueue || queuePaused || Boolean(queueActionLoading)}
+                    disabled={!selectedBusinessId || !canManageQueue || queuePaused || Boolean(queueActionLoading)}
                   >
                     {queueActionLoading === "call-next" ? "Calling..." : "Call Next Customer"}
                   </button>
@@ -2423,7 +2439,7 @@ if (!isTodayQueue) {
                   <button
                     className="btn btn-outline"
                     onClick={pauseQueue}
-                    disabled={!selectedBusinessId || !isTodayQueue || !queuePauseSupported || queuePaused || Boolean(queueActionLoading)}
+                    disabled={!selectedBusinessId || !canManageQueue || !queuePauseSupported || queuePaused || Boolean(queueActionLoading)}
                   >
                     {!queuePauseSupported
                       ? "Pause unavailable"
@@ -2435,7 +2451,7 @@ if (!isTodayQueue) {
                     onClick={resumeQueue}
                     disabled={
                     !selectedBusinessId ||
-                    !isTodayQueue ||
+                    !canManageQueue ||
                     !queuePauseSupported ||
                     !queuePaused ||
                     Boolean(queueActionLoading)
@@ -2451,7 +2467,7 @@ if (!isTodayQueue) {
                         className="btn btn-outline"
                         type="button"
                         onClick={() => runDemoQueueAction("DELETE")}
-                        disabled={!selectedBusinessId || !isTodayQueue || demoActionLoading}
+                        disabled={!selectedBusinessId || !canManageQueue || demoActionLoading}
                       >
                         Remove Demo Entries
                       </button>
@@ -2505,14 +2521,14 @@ if (!isTodayQueue) {
                               <div className="row-actions">
                                 <button
                                   onClick={() => queueAction(q.id, "skip")}
-                                  disabled={!isTodayQueue || Boolean(queueActionLoading)}
+                                  disabled={!canManageQueue || Boolean(queueActionLoading)}
                                 >
                                   Skip
                                 </button>
                                 <button
                                   className="danger-action"
                                   onClick={() => queueAction(q.id, "cancel")}
-                                  disabled={!isTodayQueue || Boolean(queueActionLoading)}
+                                  disabled={!canManageQueue || Boolean(queueActionLoading)}
                                 >
                                   Cancel
                                 </button>
@@ -2568,7 +2584,7 @@ if (!isTodayQueue) {
                     <button
                       className="btn btn-teal"
                       onClick={callNext}
-                      disabled={!selectedBusinessId || !isTodayQueue || queuePaused || Boolean(queueActionLoading)}
+                      disabled={!selectedBusinessId || !canManageQueue || queuePaused || Boolean(queueActionLoading)}
                     >
                       {queueActionLoading === "call-next" ? "Calling..." : "Call Next Customer"}
                     </button>
@@ -2578,7 +2594,7 @@ if (!isTodayQueue) {
                       onClick={queuePaused ? resumeQueue : pauseQueue}
                       disabled={
                       !selectedBusinessId ||
-                      !isTodayQueue ||
+                      !canManageQueue ||
                       !queuePauseSupported ||
                       Boolean(queueActionLoading)
                     }
@@ -2767,14 +2783,14 @@ if (!isTodayQueue) {
                       <button
                         type="button"
                         onClick={() => queueAction(item.id, "complete")}
-                        disabled={!isTodayQueue || Boolean(queueActionLoading)}
+                        disabled={!canManageQueue || Boolean(queueActionLoading)}
                       >
                         {queueActionLoading === `complete-${item.id}` ? "Completing..." : "Complete Service"}
                       </button>
                       <button
                         type="button"
                         onClick={() => queueAction(item.id, "skip")}
-                        disabled={!isTodayQueue || Boolean(queueActionLoading)}
+                        disabled={!canManageQueue || Boolean(queueActionLoading)}
                       >
                         Skip
                       </button>
@@ -2782,7 +2798,7 @@ if (!isTodayQueue) {
                         type="button"
                         className="danger-action"
                         onClick={() => queueAction(item.id, "cancel")}
-                        disabled={!isTodayQueue || Boolean(queueActionLoading)}
+                        disabled={!canManageQueue || Boolean(queueActionLoading)}
                       >
                         Cancel Entry
                       </button>
