@@ -2250,7 +2250,7 @@ if (!canManageQueue) {
       )}
 
       {role === "admin" && !token && (
-        <main className="login-page admin-login-page">
+        <main className="login-page customer-login-page admin-login-page">
           <div className="login-art">
             <div className="login-art-orbit" />
             <div className="login-art-card">
