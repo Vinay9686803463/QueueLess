@@ -3891,42 +3891,6 @@ html[data-theme="dark"] .admin-record span,
 html[data-theme="dark"] .customer-record span { color: #a9b4c0; }
 html[data-theme="dark"] .profile-appearance button[aria-pressed="true"] { background: #137f82 !important; color: #fff !important; }
 
-/* Administrator login page color overrides (matches customer login layout) */
-.admin-login-page {
-  background: #176F70 !important;
-}
-
-html[data-theme="dark"] .admin-login-page {
-  background: #176F70 !important;
-}
-
-.admin-login-page .btn-admin-login {
-  background: linear-gradient(135deg, #117F7D, #16A39C) !important;
-  box-shadow: 0 7px 17px #117F7D28;
-}
-
-.admin-login-page .btn-admin-login:hover:not(:disabled) {
-  background: linear-gradient(135deg, #0f6f6d, #14908a) !important;
-}
-
-.admin-login-page .login-secondary-actions .btn {
-  background: #e8f7f5 !important;
-  color: #117F7D !important;
-  border-color: #cfe8e5 !important;
-}
-
-.admin-login-page .login-secondary-actions .btn:hover {
-  background: #d4f0ec !important;
-}
-
-.admin-login-page .login-card .eyebrow {
-  color: #0b8580;
-}
-
-.admin-login-page .login-card h1 {
-  color: #163b43;
-}
-
 /* Customer portal visual alignment with admin portal */
 .customer-mode .customer-layout,
 .customer-layout {
