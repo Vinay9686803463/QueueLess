@@ -799,7 +799,7 @@ useEffect(() => {
       setCustomerAppointments(appointments.appointments || []);
       setCustomerTokens(queueTokens.tokens || []);
     } catch (error) {
-      if (error?.status === 401 || error?.status === 403 || error?.status === 404) {
+      if (error?.status === 401 || error?.status === 403) {
         customerTokenRef.current = "";
         restoredCustomerSession.current = false;
         setCustomerToken("");
@@ -956,7 +956,7 @@ useEffect(() => {
         setSelectedBusinessId(nextSelection.id);
       }
     } catch (err) {
-      if (err?.status === 401 || err?.status === 403 || err?.status === 404) {
+      if (err?.status === 401 || err?.status === 403) {
         adminTokenRef.current = "";
         restoredAdminSession.current = false;
         setToken("");
@@ -1469,6 +1469,62 @@ if (!canManageQueue) {
       );
     });
   }, [adminCustomers, customerSearch]);
+
+  /* Maintain sessions when switching browser tabs */
+  const loadBusinessesRef = useRef(loadBusinesses);
+  const loadCustomerAccountRef = useRef(loadCustomerAccount);
+
+  useEffect(() => {
+    loadBusinessesRef.current = loadBusinesses;
+    loadCustomerAccountRef.current = loadCustomerAccount;
+  }, [loadBusinesses, loadCustomerAccount]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+
+      if (token) {
+        api("/auth/me", {}, token)
+          .then((data) => {
+            setAdminProfile(data.user || null);
+          })
+          .catch((error) => {
+            if (!error?.status) return; // network error: keep session
+            if (![401, 403].includes(error.status)) return;
+            adminTokenRef.current = "";
+            restoredAdminSession.current = false;
+            setToken("");
+            setAdminProfile(null);
+          });
+        if (selectedBusinessId) {
+          loadBusinessData(selectedBusinessId, token, { quiet: true }).catch(() => {});
+        } else {
+          loadBusinessesRef.current?.().catch(() => {});
+        }
+      }
+
+      if (customerToken) {
+        api("/customer-auth/me", {}, customerToken)
+          .then((data) => {
+            setCustomerProfile(data.customer || null);
+          })
+          .catch((error) => {
+            if (!error?.status) return;
+            if (![401, 403].includes(error.status)) return;
+            customerTokenRef.current = "";
+            restoredCustomerSession.current = false;
+            setCustomerToken("");
+            setCustomerProfile(null);
+            setCustomerAppointments([]);
+            setCustomerTokens([]);
+          });
+        loadCustomerAccountRef.current?.(customerToken).catch(() => {});
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [token, customerToken, selectedBusinessId]);
 
   return (
     <div
