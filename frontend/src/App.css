@@ -3658,7 +3658,7 @@ html[data-theme="dark"] .admin-record, html[data-theme="dark"] .customer-record,
   min-height: calc(100vh - 76px);
   margin: 0;
   padding: clamp(28px, 5vw, 64px);
-  background: linear-gradient(135deg, #104F50 0%, #126B6D 50%, #167C7D 100%);
+  background: linear-gradient(135deg, #0f172a, #1e3a8a);
 }
 
 .customer-login-page .login-art {
@@ -3834,7 +3834,8 @@ html[data-theme="dark"] .customer-page,
 html[data-theme="dark"] .admin-layout,
 html[data-theme="dark"] .admin-main,
 html[data-theme="dark"] .admin-content,
-html[data-theme="dark"] .login-page {
+html[data-theme="dark"] .login-page,
+html[data-theme="dark"] .customer-login-page {
   --ink: #f1f5f9;
   --muted: #a9b4c0;
   --line: #30343b;
