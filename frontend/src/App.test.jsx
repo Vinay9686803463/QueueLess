@@ -666,6 +666,14 @@ describe("QueueLess frontend", () => {
       },
       appointments: [
         {
+          id: "appointment-past",
+          business_id: "business-one",
+          customer_name: "Past Business Appointment",
+          service_name: "Past Appointment Service",
+          status: "confirmed",
+          scheduled_at: "2020-01-02T10:00:00",
+        },
+        {
           id: "appointment-one",
           business_id: "business-one",
           customer_name: "First Business Appointment",
@@ -690,6 +698,10 @@ describe("QueueLess frontend", () => {
     expect(await screen.findByText("First Business Customer")).toBeInTheDocument();
     expect(await screen.findByText("First Business Service")).toBeInTheDocument();
     expect(await screen.findByText(/First Appointment Service · First Business Appointment/)).toBeInTheDocument();
+    expect(await screen.findByText(/Past Appointment Service · Past Business Appointment/)).toBeInTheDocument();
+    expect(
+      screen.getByText("Upcoming appointments").closest(".stat-card").querySelector("strong")
+    ).toHaveTextContent("1");
 
     await user.selectOptions(selector, "business-two");
 
@@ -699,9 +711,73 @@ describe("QueueLess frontend", () => {
     expect(screen.queryByText("First Business Customer")).not.toBeInTheDocument();
     expect(screen.queryByText("First Business Service")).not.toBeInTheDocument();
     expect(screen.queryByText(/First Appointment Service · First Business Appointment/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Past Appointment Service · Past Business Appointment/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Upcoming appointments").closest(".stat-card").querySelector("strong")
+    ).toHaveTextContent("1");
     expect(fetch.mock.calls.some(([url]) => String(url).includes("/api/businesses/business-two/queue?"))).toBe(true);
     expect(fetch.mock.calls.some(([url]) => String(url).includes("/api/businesses/business-two/services"))).toBe(true);
-    expect(fetch.mock.calls.filter(([url]) => String(url).includes("/api/appointments")).length).toBeGreaterThan(1);
+    expect(fetch.mock.calls.some(([url]) =>
+      String(url).includes("/api/appointments?business_id=business-two")
+    )).toBe(true);
+  });
+
+  it("shows appointment retrieval failures instead of reporting zero and retries successfully", async () => {
+    let appointmentRequests = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const requestUrl = String(url);
+      if (requestUrl.includes("/api/health")) return jsonResponse({});
+      if (requestUrl.includes("/api/auth/login")) {
+        return jsonResponse({ access_token: "admin-session-token" });
+      }
+      if (requestUrl.endsWith("/api/businesses")) {
+        return jsonResponse({
+          businesses: [{ id: "business-one", business_name: "Pioneer Community Bank" }],
+        });
+      }
+      if (requestUrl.includes("/api/businesses/business-one/services")) {
+        return jsonResponse({ services: [] });
+      }
+      if (requestUrl.includes("/api/businesses/business-one/queue")) {
+        return jsonResponse({ waiting: [] });
+      }
+      if (requestUrl.includes("/api/appointments?business_id=business-one")) {
+        appointmentRequests += 1;
+        if (appointmentRequests === 1) {
+          return jsonResponse({
+            status: "error",
+            message: "Unable to retrieve appointments",
+          }, 500);
+        }
+        return jsonResponse({
+          appointments: [{
+            id: "appointment-one",
+            business_id: "business-one",
+            customer_name: "Recovered Appointment",
+            service_name: "Consultation",
+            status: "confirmed",
+            scheduled_at: "2027-01-02T10:00:00",
+          }],
+        });
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    });
+
+    render(<App />);
+    await signInAsAdmin(user);
+
+    expect(await screen.findByText(
+      "Appointments could not be loaded: Unable to retrieve appointments"
+    )).toBeInTheDocument();
+    expect(
+      screen.getByText("Upcoming appointments").closest(".stat-card").querySelector("strong")
+    ).toHaveTextContent("—");
+    expect(screen.queryByText("No appointments are scheduled for this business.")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByText(/Consultation · Recovered Appointment/)).toBeInTheDocument();
+    expect(appointmentRequests).toBe(2);
   });
 
   it("shows a no-businesses state for a successful empty API response", async () => {

@@ -258,6 +258,7 @@ const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_c
   const [publicServices, setPublicServices] = useState([]);
   const [adminServices, setAdminServices] = useState([]);
   const [adminAppointments, setAdminAppointments] = useState([]);
+  const [appointmentsError, setAppointmentsError] = useState("");
   const [queue, setQueue] = useState([]);
   const [queueDate, setQueueDate] = useState(() => getLocalDateISO());
   const queueDateManuallySelected = useRef(false);
@@ -824,6 +825,7 @@ useEffect(() => {
     setQueuePauseSupported(true);
     setAdminServices([]);
     setAdminAppointments([]);
+    setAppointmentsError("");
     setDashboardError("");
     setDashboardLoading(false);
     setServiceForm({
@@ -856,6 +858,7 @@ useEffect(() => {
         setQueuePauseSupported(true);
         setAdminServices([]);
         setAdminAppointments([]);
+        setAppointmentsError("");
         setDashboardLoading(false);
         return;
       }
@@ -901,6 +904,7 @@ useEffect(() => {
       setQueuePauseSupported(true);
       setAdminServices([]);
       setAdminAppointments([]);
+      setAppointmentsError("");
       setDashboardLoading(false);
       return false;
     }
@@ -916,7 +920,11 @@ useEffect(() => {
           {},
           authToken
         ),
-        api("/appointments", {}, authToken),
+        api(
+          `/appointments?business_id=${encodeURIComponent(businessId)}`,
+          {},
+          authToken
+        ),
       ]);
 
       if (
@@ -940,16 +948,33 @@ useEffect(() => {
         notify(queueResult.reason?.message || "Unable to retrieve queue");
       }
 
-      if (appointmentsResult.status === "fulfilled") {
+      const appointmentList =
+        appointmentsResult.status === "fulfilled"
+          ? appointmentsResult.value.appointments
+          : null;
+      const appointmentsLoaded = Array.isArray(appointmentList);
+      if (appointmentsLoaded) {
+        setAppointmentsError("");
         setAdminAppointments(
-          (appointmentsResult.value.appointments || []).filter(
+          appointmentList.filter(
             (appointment) => String(appointment.business_id) === String(businessId)
           )
         );
       } else {
-        notify(appointmentsResult.reason?.message || "Unable to retrieve appointments");
+        setAdminAppointments([]);
+        setAppointmentsError(
+          appointmentsResult.status === "rejected"
+            ? appointmentsResult.reason?.message || "Unable to retrieve appointments"
+            : "Invalid appointments response"
+        );
       }
-      return true;
+      return {
+        current: true,
+        allLoaded:
+          servicesResult.status === "fulfilled" &&
+          queueResult.status === "fulfilled" &&
+          appointmentsLoaded,
+      };
     } catch (err) {
       if (requestId === businessLoadRequest.current) {
         setDashboardError(err.message);
@@ -974,6 +999,7 @@ useEffect(() => {
       setQueuePauseSupported(true);
       setAdminServices([]);
       setAdminAppointments([]);
+      setAppointmentsError("");
       loadBusinessData(selectedBusinessId);
     } else if (!selectedBusinessId) {
       setQueue([]);
@@ -981,6 +1007,7 @@ useEffect(() => {
       setQueuePauseSupported(true);
       setAdminServices([]);
       setAdminAppointments([]);
+      setAppointmentsError("");
       setDashboardLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1001,7 +1028,17 @@ useEffect(() => {
     setRefreshing(true);
     try {
       const loaded = await loadBusinessData(selectedBusinessId);
-      if (loaded) notify("Dashboard refreshed");
+      if (loaded?.current && loaded.allLoaded) notify("Dashboard refreshed");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const retryAppointments = async () => {
+    if (!selectedBusinessId || refreshing) return;
+    setRefreshing(true);
+    try {
+      await loadBusinessData(selectedBusinessId);
     } finally {
       setRefreshing(false);
     }
@@ -1018,7 +1055,7 @@ if (!isTodayQueue) {
     try {
       await api(requestPath, { method: "POST" }, token);
       const loaded = await loadBusinessData(selectedBusinessId);
-      if (loaded) notify(successMessage);
+      if (loaded?.current) notify(successMessage);
     } catch (err) {
       notify(err.message);
     } finally {
@@ -2167,6 +2204,7 @@ if (!isTodayQueue) {
                     setQueuePauseSupported(true);
                     setAdminServices([]);
                     setAdminAppointments([]);
+                    setAppointmentsError("");
                     setSelectedBusinessId(event.target.value);
                   }}
                   disabled={businessesLoading}
@@ -2315,8 +2353,12 @@ if (!isTodayQueue) {
               />
               <StatCard
                 label="Upcoming appointments"
-                value={adminUpcomingAppointmentsCount}
-                detail="Confirmed or booked future visits"
+                value={appointmentsError ? "—" : adminUpcomingAppointmentsCount}
+                detail={
+                  appointmentsError
+                    ? "Could not retrieve appointments"
+                    : "Confirmed or booked future visits"
+                }
                 icon="📅"
               />
             </section>
@@ -2755,9 +2797,24 @@ if (!isTodayQueue) {
                     <h2>Schedule</h2>
                     <p>{selectedBusiness?.business_name || "Appointments for this business"}</p>
                   </div>
-                  <span className="panel-icon">{adminAppointments.length}</span>
+                  <span className="panel-icon">
+                    {appointmentsError ? "!" : adminAppointments.length}
+                  </span>
                 </div>
-                {adminAppointments.length ? (
+                {appointmentsError ? (
+                  <div className="dashboard-error" role="alert">
+                    <span>Appointments could not be loaded: {appointmentsError}</span>
+                    <button
+                      type="button"
+                      onClick={retryAppointments}
+                      disabled={refreshing}
+                    >
+                      {refreshing ? "Retrying..." : "Retry"}
+                    </button>
+                  </div>
+                ) : dashboardLoading ? (
+                  <p className="muted-empty" role="status">Loading appointments...</p>
+                ) : adminAppointments.length ? (
                   <div className="admin-schedule-list">
                     {adminAppointments
                       .slice()

@@ -315,13 +315,42 @@ def test_create_appointment_conflict(client, appointment):
 def test_list_appointments(client, appointment):
     registered_user, business_id, service_id, appointment_id, _ = appointment
     response = client.get(
-        "/api/appointments",
+        f"/api/appointments?business_id={business_id}",
         headers={"Authorization": f"Bearer {registered_user['token']}"},
     )
     assert response.status_code == 200
     data = response.get_json()
     assert data["status"] == "success"
     assert any(item["id"] == appointment_id for item in data["appointments"])
+    assert all(item["business_id"] == business_id for item in data["appointments"])
+
+
+def test_list_appointments_rejects_unauthorized_business(client, registered_user):
+    response = client.get(
+        f"/api/appointments?business_id={uuid.uuid4()}",
+        headers={"Authorization": f"Bearer {registered_user['token']}"},
+    )
+    assert response.status_code == 404
+    assert response.get_json()["message"] == "Business not found"
+
+
+def test_list_appointments_requires_auth(client):
+    response = client.get("/api/appointments")
+    assert response.status_code == 401
+    assert response.get_json()["message"] == "Authentication token is required"
+
+
+def test_list_appointments_returns_empty_for_user_without_businesses(client, registered_user):
+    response = client.get(
+        "/api/appointments",
+        headers={"Authorization": f"Bearer {registered_user['token']}"},
+    )
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "status": "success",
+        "count": 0,
+        "appointments": [],
+    }
 
 
 def test_get_appointment(client, appointment):

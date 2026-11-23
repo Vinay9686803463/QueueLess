@@ -55,7 +55,6 @@ def get_appointment_columns():
         customer_email,
         customer_id::text AS customer_id,
         scheduled_at,
-        duration_minutes,
         status,
         notes,
         created_at,
@@ -172,7 +171,7 @@ def check_booking_conflict(business_id, service_id, scheduled_at, duration_minut
             SELECT
                 a.id::text AS id,
                 a.scheduled_at,
-                COALESCE(a.duration_minutes, s.duration_minutes) AS duration_minutes
+                s.duration_minutes
             FROM appointments a
             JOIN services s ON s.id = a.service_id
             WHERE a.business_id = :business_id
@@ -453,32 +452,46 @@ def get_appointment(appointment_id):
 @appointment_bp.route("", methods=["GET"])
 @token_required
 def list_appointments():
-    business_ids = accessible_business_ids(g.current_user["id"])
+    requested_business_id = request.args.get("business_id")
 
-    if not business_ids:
+    if requested_business_id and not _is_uuid(requested_business_id):
         return jsonify({
-            "status": "success",
-            "count": 0,
-            "appointments": [],
-        }), 200
-
-    params = {"business_ids": tuple(business_ids)}
-
-    query = """
-        SELECT
-    """ + get_appointment_columns() + """,
-            (SELECT s.service_name FROM services s WHERE s.id = appointments.service_id)
-                AS service_name,
-            (SELECT b.business_name FROM businesses b WHERE b.id = appointments.business_id)
-                AS business_name
-        FROM appointments
-        WHERE appointments.business_id::text IN :business_ids
-    """
+            "status": "error",
+            "message": "Invalid business ID",
+        }), 400
 
     try:
+        business_ids = accessible_business_ids(g.current_user["id"])
+        if requested_business_id:
+            if requested_business_id not in business_ids:
+                return jsonify({
+                    "status": "error",
+                    "message": "Business not found",
+                }), 404
+            business_ids = {requested_business_id}
+
+        if not business_ids:
+            return jsonify({
+                "status": "success",
+                "count": 0,
+                "appointments": [],
+            }), 200
+
+        query = """
+            SELECT
+        """ + get_appointment_columns() + """,
+                (SELECT s.service_name FROM services s WHERE s.id = appointments.service_id)
+                    AS service_name,
+                (SELECT s.duration_minutes FROM services s WHERE s.id = appointments.service_id)
+                    AS duration_minutes,
+                (SELECT b.business_name FROM businesses b WHERE b.id = appointments.business_id)
+                    AS business_name
+            FROM appointments
+            WHERE appointments.business_id::text IN :business_ids
+        """
         appointments = db.session.execute(
             text(query).bindparams(bindparam("business_ids", expanding=True)),
-            params
+            {"business_ids": tuple(business_ids)},
         ).mappings().all()
 
         return jsonify({
@@ -490,6 +503,7 @@ def list_appointments():
         }), 200
 
     except Exception:
+        db.session.rollback()
         current_app.logger.exception("Appointment listing failed")
 
         return jsonify({
