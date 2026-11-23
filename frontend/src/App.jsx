@@ -256,6 +256,7 @@ const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_c
   const [customerProfile, setCustomerProfile] = useState(null);
   const [customerAppointments, setCustomerAppointments] = useState([]);
   const [customerTokens, setCustomerTokens] = useState([]);
+  const [customerDataLoading, setCustomerDataLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
 
   const [business, setBusiness] = useState(null);
@@ -359,12 +360,47 @@ const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_c
     return () => { active = false; };
   }, [token, adminProfile]);
 
+  const loadCustomerAccount = useCallback(async (authToken) => {
+    setCustomerDataLoading(true);
+    try {
+      const [appointmentsResult, queueTokensResult] = await Promise.allSettled([
+        api("/customer-auth/appointments", {}, authToken),
+        api("/customer-auth/queue-tokens", {}, authToken),
+      ]);
+
+      if (appointmentsResult.status === "fulfilled") {
+        setCustomerAppointments(appointmentsResult.value.appointments || []);
+      }
+      if (queueTokensResult.status === "fulfilled") {
+        setCustomerTokens(queueTokensResult.value.tokens || []);
+      }
+
+      const firstRejection = [appointmentsResult, queueTokensResult].find(
+        (result) => result.status === "rejected"
+      );
+      if (firstRejection) {
+        const error = firstRejection.reason;
+        if (error?.status === 401 || error?.status === 403) {
+          customerTokenRef.current = "";
+          restoredCustomerSession.current = false;
+          setCustomerToken("");
+          setCustomerProfile(null);
+          setCustomerAppointments([]);
+          setCustomerTokens([]);
+        }
+        throw error;
+      }
+    } finally {
+      setCustomerDataLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!customerToken || customerProfile || !restoredCustomerSession.current) return;
     let active = true;
-    api("/customer-auth/me", {}, customerToken).then((data) => { if (active) setCustomerProfile(data.customer || null); }).catch((error) => { if (!active || customerTokenRef.current !== customerToken) return; const status = error?.status; if (!status) return; if (![401, 403, 404].includes(status)) return; setCustomerProfile(null); setCustomerToken(""); customerTokenRef.current = ""; setCustomerAppointments([]); setCustomerTokens([]); });
+    api("/customer-auth/me", {}, customerToken).then((data) => { if (active) { setCustomerProfile(data.customer || null); loadCustomerAccount(customerToken).catch(() => {}); } }).catch((error) => { if (!active || customerTokenRef.current !== customerToken) return; const status = error?.status; if (!status) return; if (![401, 403, 404].includes(status)) return; setCustomerProfile(null); setCustomerToken(""); customerTokenRef.current = ""; setCustomerAppointments([]); setCustomerTokens([]); });
     return () => { active = false; };
-  }, [customerToken, customerProfile]);
+  }, [customerToken, customerProfile, loadCustomerAccount]);
 
   useEffect(() => {
     api("/public/businesses").then((data) => setPublicBusinesses(data.businesses || [])).catch(() => setPublicBusinesses([]));
@@ -789,27 +825,6 @@ useEffect(() => {
       notify(err.message);
     }
   };
-
-  const loadCustomerAccount = useCallback(async (authToken) => {
-    try {
-      const [appointments, queueTokens] = await Promise.all([
-        api("/customer-auth/appointments", {}, authToken),
-        api("/customer-auth/queue-tokens", {}, authToken),
-      ]);
-      setCustomerAppointments(appointments.appointments || []);
-      setCustomerTokens(queueTokens.tokens || []);
-    } catch (error) {
-      if (error?.status === 401 || error?.status === 403) {
-        customerTokenRef.current = "";
-        restoredCustomerSession.current = false;
-        setCustomerToken("");
-        setCustomerProfile(null);
-        setCustomerAppointments([]);
-        setCustomerTokens([]);
-      }
-      throw error;
-    }
-  }, []);
 
   useEffect(() => {
     if (!customerToken) return undefined;
@@ -1881,49 +1896,67 @@ if (!canManageQueue) {
                 <div className="customer-dashboard-records">
                   <section className="customer-record-panel" id="customer-upcoming" aria-labelledby="upcoming-title">
                     <h3 id="upcoming-title">Upcoming appointments</h3>
-                    {customerUpcomingAppointments.length ? customerUpcomingAppointments.map((appointment) => (
-                      <article className="customer-record" key={appointment.id}>
-                        <div>
-                          <strong>{appointment.service_name || "Appointment"} · {appointment.status}</strong>
-                          <span>{appointment.business_name || "QueueLess business"}</span>
-                          <span>{new Date(appointment.scheduled_at).toLocaleString()}</span>
-                        </div>
-                        {["booked", "confirmed"].includes(String(appointment.status).toLowerCase()) && (
-                          <button
-                            className="customer-cancel-button"
-                            type="button"
-                            onClick={() => cancelCustomerAppointment(appointment.id)}
-                          >
-                            Cancel
-                          </button>
-                        )}
-                      </article>
-                    )) : <p>No upcoming appointments.</p>}
+                    {customerDataLoading ? (
+                      <p>Loading upcoming appointments…</p>
+                    ) : customerUpcomingAppointments.length ? (
+                      customerUpcomingAppointments.map((appointment) => (
+                        <article className="customer-record" key={appointment.id}>
+                          <div>
+                            <strong>{appointment.service_name || "Appointment"} · {appointment.status}</strong>
+                            <span>{appointment.business_name || "QueueLess business"}</span>
+                            <span>{new Date(appointment.scheduled_at).toLocaleString()}</span>
+                          </div>
+                          {["booked", "confirmed"].includes(String(appointment.status).toLowerCase()) && (
+                            <button
+                              className="customer-cancel-button"
+                              type="button"
+                              onClick={() => cancelCustomerAppointment(appointment.id)}
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </article>
+                      ))
+                    ) : (
+                      <p>No upcoming appointments.</p>
+                    )}
                   </section>
                   <section className="customer-record-panel" id="customer-history" aria-labelledby="history-title">
                     <h3 id="history-title">Appointment history</h3>
-                    {customerAppointmentHistory.length ? customerAppointmentHistory.map((appointment) => (
-                      <article className="customer-record" key={appointment.id}>
-                        <div>
-                          <strong>{appointment.service_name || "Appointment"}</strong>
-                          <span>{appointment.business_name || "QueueLess business"}</span>
-                          <span>{new Date(appointment.scheduled_at).toLocaleString()}</span>
-                          <small className="status-badge">{appointment.status}</small>
-                        </div>
-                      </article>
-                    )) : <p>No appointment history yet.</p>}
+                    {customerDataLoading ? (
+                      <p>Loading appointment history…</p>
+                    ) : customerAppointmentHistory.length ? (
+                      customerAppointmentHistory.map((appointment) => (
+                        <article className="customer-record" key={appointment.id}>
+                          <div>
+                            <strong>{appointment.service_name || "Appointment"}</strong>
+                            <span>{appointment.business_name || "QueueLess business"}</span>
+                            <span>{new Date(appointment.scheduled_at).toLocaleString()}</span>
+                            <small className="status-badge">{appointment.status}</small>
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <p>No appointment history yet.</p>
+                    )}
                   </section>
                   <section className="customer-record-panel customer-live-queue" id="customer-tokens" aria-labelledby="tokens-title">
                     <h3 id="tokens-title">Queue tokens · live status</h3>
-                    {customerTokens.length ? customerTokens.map((queueToken) => (
-                      <article className="customer-record" key={queueToken.id}>
-                        <div>
-                          <strong>Token #{queueToken.token_number} · {queueToken.status} · {queueToken.ahead} ahead</strong>
-                          <span>{queueToken.business_name || "QueueLess business"} · {queueToken.service_name || "Service"}</span>
-                          <small>Estimated wait: {queueToken.estimated_wait_minutes ?? "—"} min</small>
-                        </div>
-                      </article>
-                    )) : <p>No queue tokens yet.</p>}
+                    {customerDataLoading ? (
+                      <p>Loading queue tokens…</p>
+                    ) : customerTokens.length ? (
+                      customerTokens.map((queueToken) => (
+                        <article className="customer-record" key={queueToken.id}>
+                          <div>
+                            <strong>Token #{queueToken.token_number} · {queueToken.status} · {queueToken.ahead} ahead</strong>
+                            <span>{queueToken.business_name || "QueueLess business"} · {queueToken.service_name || "Service"}</span>
+                            <small>Estimated wait: {queueToken.estimated_wait_minutes ?? "—"} min</small>
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <p>No queue tokens yet.</p>
+                    )}
                   </section>
                 </div>
               </section>
