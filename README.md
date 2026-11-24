@@ -191,9 +191,39 @@ Supabase provides the hosted PostgreSQL database.
 
 Database configuration is managed through environment variables. Do not upload `.env` files or database credentials to GitHub.
 
-## 🌐 Repository
+---
 
-**GitHub:** https://github.com/Vinay9686803463/QueueLess
+## 🚀 Deployment
+
+Student Support AI can be deployed to a compatible hosting platform, depending on the repository's deployment configuration.
+
+### Deployment checklist
+
+1. Push the reviewed changes to the GitHub repository.
+2. Connect the repository to the chosen hosting platform.
+3. Configure the required environment variables in the hosting dashboard.
+4. Configure the database and persistent storage where needed.
+5. Verify AI provider configuration and network access.
+6. Deploy and inspect application logs.
+7. Test login, study materials, chat responses, and other important features.
+
+### ⚠️ Production considerations
+
+- Keep all API keys and application secrets server-side.
+- Configure a persistent database for production data.
+- Verify that uploaded study materials and generated indexes are stored appropriately.
+- Test database migrations and recovery procedures before applying them to production.
+
+---
+
+## 🌐 Project Links
+
+| Resource | Link |
+|---|---|
+| 🚀 **Live Demo** | [QueueLess](https://queueless-alpha-six.vercel.app/) |
+| 💻 **GitHub Repository** | [QueueLess Repository](https://github.com/Vinay9686803463/QueueLess) |
+
+---
 
 ## 🎯 Project Goal
 
