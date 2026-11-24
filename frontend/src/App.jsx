@@ -356,7 +356,7 @@ const restoredCustomerSession = useRef(Boolean(localStorage.getItem("queueless_c
     };
     window.addEventListener("storage", syncTheme);
     return () => window.removeEventListener("storage", syncTheme);
-  }, []);
+  }, []); 
 
   useEffect(() => {
     const outside = (event) => { if (!profileRef.current?.contains(event.target)) setProfileOpen(false); };
