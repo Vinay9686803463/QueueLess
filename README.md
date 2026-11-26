@@ -231,4 +231,4 @@ The main goal of QueueLess is to make appointment scheduling and queue managemen
 
 ---
 
-**QueueLess – Book Smart. Wait Less.**
+**QueueLess – Book Smart. Wait Less.** 
