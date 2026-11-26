@@ -2,7 +2,7 @@
 
 > A Smart Digital Queue and Appointment Management System that helps businesses manage customer appointments, waiting lists, and queues while providing customers with a convenient booking and queue-tracking experience.
 
-## 📌 About the Project
+## 📌 About the Project 
 
 QueueLess is a web-based queue and appointment management platform designed to simplify customer flow and reduce waiting time.
 
