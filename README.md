@@ -230,4 +230,5 @@ Student Support AI can be deployed to a compatible hosting platform, depending o
 The main goal of QueueLess is to make appointment scheduling and queue management easier for businesses and customers by providing a centralized digital platform.
 
 ---
+
 **QueueLess – Book Smart. Wait Less.** 
